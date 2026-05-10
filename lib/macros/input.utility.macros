@@ -1,0 +1,18 @@
+; A macro to help unroll the snes max button reading loop
+; Add support for a value too.
+                            macro
+&lab                        snes_read_controller_button &count,&store1,&store2
+&lab                        anop
+                            lcla    &index
+&index                      seta    0
+.loop
+                            nop                                     ; 2 This is here, so when the next entry is read, we don't have a clock strobe and a read back-to-back, which seems to cause occasional incorrect values
+                            lda |$0000                              ; 4
+                            rol a                                   ; 2
+                            rol &store1                             ; 6
+                            rol a                                   ; 2
+                            rol &store2                             ; 6
+                            sta |$0001                              ; 4
+&index                      seta &index+1
+                            aif     &index<&count,.loop
+                            mend

@@ -1,0 +1,37 @@
+appdata~ui_color~black~pixel       gequ $0
+appdata~ui_color~yellow~pixel      gequ $1
+appdata~ui_color~light_yellow~pixel gequ $2
+appdata~ui_color~tan~pixel         gequ $3
+appdata~ui_color~light_gray~pixel  gequ $4
+appdata~ui_color~blue_gray~pixel   gequ $5
+appdata~ui_color~light_blue~pixel  gequ $6
+appdata~ui_color~effect1~pixel     gequ $7
+appdata~ui_color~effect2~pixel     gequ $8
+appdata~ui_color~blue~pixel        gequ $9
+appdata~ui_color~dark_green~pixel  gequ $a
+appdata~ui_color~purple~pixel      gequ $b
+appdata~ui_color~dark_red~pixel    gequ $c
+appdata~ui_color~red~pixel         gequ $d
+appdata~ui_color~effect3~pixel     gequ $e
+appdata~ui_color~white~pixel       gequ $f
+
+appdata~ui_color~black~bits       gequ $0000
+appdata~ui_color~yellow~bits      gequ $1111
+appdata~ui_color~light_yellow~bits gequ $2222
+appdata~ui_color~tan~bits         gequ $3333
+appdata~ui_color~light_gray~bits  gequ $4444
+appdata~ui_color~blue_gray~bits   gequ $5555
+appdata~ui_color~light_blue~bits  gequ $6666
+appdata~ui_color~effect1~bits     gequ $7777
+appdata~ui_color~effect2~bits     gequ $8888
+appdata~ui_color~blue~bits        gequ $9999
+appdata~ui_color~dark_green~bits  gequ $aaaa
+appdata~ui_color~purple~bits      gequ $bbbb
+appdata~ui_color~dark_red~bits    gequ $cccc
+appdata~ui_color~red~bits         gequ $dddd
+appdata~ui_color~effect3~bits     gequ $eeee
+appdata~ui_color~white~bits       gequ $ffff
+
+ui_text_section~end_section         gequ $8000
+ui_text_section~centered            gequ $4000
+ui_text_section~keep_color          gequ $8000

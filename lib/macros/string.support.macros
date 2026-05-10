@@ -1,0 +1,33 @@
+;............................................................
+;
+;       Get the length of an 8-bit string.
+;
+;    string_length address    - Loops over address using address,y
+; The length of the string will be in y
+;...............................................................
+        MACRO
+&lab    string_length &addr
+&lab    ANOP
+        ldy #$FFFF
+        sep #%00100000
+        longa off
+~a&SYSCNT ANOP
+        iny
+        lda &addr,y
+        bne ~a&SYSCNT
+        rep #%00100000
+        longa on
+        MEND
+
+;...............................................................
+; Embed a cstring
+;...............................................................
+        MACRO
+&lab    cstring &SYSOPR
+&lab    ANOP
+        lclc &tag
+&tag    setc &SYSOPR
+
+        dc C'&tag',i1'0'
+.skip
+        MEND

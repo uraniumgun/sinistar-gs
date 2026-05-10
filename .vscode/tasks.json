@@ -1,0 +1,137 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "make",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "transfer",
+			"type": "shell",
+			"command": "make transfer",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "transfer app",
+			"type": "shell",
+			"command": "make transfer_app",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "transfer data",
+			"type": "shell",
+			"command": "make transfer_data",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "remove user data",
+			"type": "shell",
+			"command": "make remove_user_data",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "clean all",
+			"type": "shell",
+			"command": "make clean",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "clean code",
+			"type": "shell",
+			"command": "make clean_code",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "clean macros",
+			"type": "shell",
+			"command": "make clean_macros",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "clean disk image",
+			"type": "shell",
+			"command": "make clean_disk_image",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "build macros",
+			"type": "shell",
+			"command": "make build_macros",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "convert audio",
+			"type": "shell",
+			"command": "make convert_audio",
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "convert symbols",
+			"type": "shell",
+			"command": "./orca-to-merlin-symbols.ps1",
+			"args":["-map", "./debug/app.map", "-dest", "./debug/sinistar.gs_symbols.txt"],
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "make data",
+			"type": "shell",
+			"command": "./makedata.ps1",
+			"args":[],
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "copy to usb",
+			"type": "shell",
+			"command": "./copyit.ps1",
+			"args":[],
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		}
+	]
+}

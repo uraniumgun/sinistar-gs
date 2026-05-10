@@ -1,0 +1,24 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run extractimages",
+			"type": "PowerShell",
+			"request": "launch",
+			"script": "${workspaceFolder}/extractimages.ps1",
+			"args": ["-src ${workspaceFolder}/assets/art/image.s"],
+			"cwd": "${workspaceRoot}"
+		},
+		{
+			"name": "Run orca-to-merlin",
+			"type": "PowerShell",
+			"request": "launch",
+			"script": "${workspaceFolder}/orca-to-merlin-symbols.ps1",
+			"args": ["-map ${workspaceFolder}/debug/app.map -dest ${workspaceFolder}/debug/sinistar.gs_symbols.txt"],
+			"cwd": "${workspaceRoot}"
+		}
+	]
+}

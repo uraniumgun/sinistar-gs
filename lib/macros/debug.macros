@@ -1,0 +1,451 @@
+;...............................................................
+; Debug/Profile macros
+;...............................................................
+
+;...............................................................
+; Print a message.  This uses the _DebugStr call, which
+; Golden Gate will print out, and continue on.
+; This macro is gated to not compile in, if debug~golden_gate
+; is not defined
+;...............................................................
+
+        MACRO
+&lab    gg_message &msg
+&lab    ANOP
+        AIF C:debug~golden_gate=0,.skip
+        pushlong &msg
+        _DebugStr
+.skip
+        MEND
+
+;...............................................................
+; Tell Golden Gate to start/stop printing a CPU trace
+;       gg_trace 1              trace on
+;       gg_trace 0              trace off
+;...............................................................
+        MACRO
+&lab    gg_trace &val
+&lab    ANOP
+        AIF C:debug~golden_gate=0,.skip
+        lda #&val
+        ldx #$11ff
+        jsl $e10000
+.skip
+        MEND
+;...............................................................
+; Returns the trace flag in A
+;       gg_get_trace
+;...............................................................
+        MACRO
+&lab    gg_get_trace &val
+&lab    ANOP
+        AIF C:debug~golden_gate=0,.skip
+        lda #&val
+        ldx #$10ff
+        jsl $e10000
+.skip
+        MEND
+
+;...............................................................
+; Tell Golden Gate to start printing a CPU trace
+;...............................................................
+        MACRO
+&lab    gg_trace_on
+&lab    ANOP
+        AIF C:debug~golden_gate=0,.skip
+        lda #1
+        ldx #$11ff
+        jsl $e10000
+.skip
+        MEND
+
+;...............................................................
+; Insert a test for a request to break if a global value is set
+; The value is stored in grlib~do_break, and if the high bit is
+; set, a break is requested, the lower bits can be checked for a value
+; to see if the break is for the inserted location
+;
+; This will destroy what is in A
+;
+        macro
+&lab    keyed_break &value,&tag
+&lab    anop
+        aif  C:debug~use_keyed_breaks=0,.skip
+        lda >grlib~do_break
+        bpl ~a&SYSCNT
+        and #$7fff
+        cmp #&value
+        bne ~a&SYSCNT
+        sta >grlib~do_break
+        brk $01
+        aif C:&tag=0,.notag
+        debugtag &tag
+.notag
+~a&SYSCNT anop
+.skip
+        mend
+
+;...............................................................
+; Print a message to GSBug.
+;
+        macro
+&lab    debugger_msg &msg
+&lab    anop
+        aif  C:debug~use_messages=0,.skip
+        pushptr &msg
+        _DebugStr
+.skip
+        mend
+
+;...............................................................
+; Test a pointer to see if it is null.
+; If it is, do a brk
+; The tag parameter is an optional string that can be embedded after the brk.
+;
+; This will destroy what is in A
+;
+        macro
+&lab    assert_ptr &value,&tag
+&lab    anop
+        aif  C:debug~use_asserts=0,.skip
+        lda &value
+        ora &value+2
+        bne ~a&SYSCNT
+        brk $01
+        aif C:&tag=0,.notag
+        debugtag &tag
+.notag
+~a&SYSCNT anop
+.skip
+        mend
+
+;...............................................................
+; Break, if debug~use_asserts is on. There is no conditional, it will alway break.
+; The tag parameter is an optional string that can be embedded after the brk.
+;
+        macro
+&lab    assert_brk &SYSOPR
+&lab    anop
+        aif  C:debug~use_asserts=0,.skip
+        brk $11
+        aif C:&SYSOPR=0,.notag
+        debugtag &SYSOPR
+.notag
+.skip
+        mend
+
+;...............................................................
+; Break, if debug~use_asserts is on, with conditional.
+; The conditional passed in, is used as the 'success' condition
+; The tag parameter is an optional string that can be embedded after the brk.
+; The code parameter is the optional brk code number
+;
+        macro
+&lab    assert_brk_cond &cond,&tag,&code
+&lab    anop
+        aif  C:debug~use_asserts=0,.skip
+        &cond ~a&SYSCNT
+        aif C:&code=0,.nocode
+        brk &code
+        ago .has_code
+.nocode
+        brk $12
+.has_code
+        aif C:&tag=0,.notag
+        debugtag &tag
+.notag
+~a&SYSCNT anop
+.skip
+        mend
+
+;...............................................................
+; Embed a debugger tag
+;...............................................................
+        MACRO
+&lab    debugtag &SYSOPR
+&lab    ANOP
+        lcla &len
+        lclc &str
+&str    setc &SYSOPR
+&len    seta L:&str
+        AIF C:debug~use_tags=0,.skip
+        brl ~a&SYSCNT
+        dc i1'$71',i1'$77'
+        dc i1'&len',C'&str'
+~a&SYSCNT anop
+.skip
+        MEND
+
+;...............................................................
+; Profile add a function symbol
+;
+; This expects profile_function_begin to be called at the top
+; of the function.  This macro should be put at the bottom
+; of the function, just before the end directive
+;
+ MACRO
+&lab    profile_function_add_symbol
+&lab    anop
+        AIF C:debug~profile=0,.skip
+profileFunctionName dc i1'L:&SYSNAME',C'&SYSNAME'
+.skip
+        MEND
+
+;...............................................................
+; Profile add a symbol
+;
+ MACRO
+&lab    profile_add_symbol &symbolname
+&lab    anop
+        AIF C:debug~profile=0,.skip
+sym_&symbolname dc i1'L:&symbolname',C'&symbolname'
+.skip
+        MEND
+
+;...............................................................
+; Profile source line marker
+;
+; Add an ORCA profiler tag.  The input is the address to the tag name.
+; This adds a cop $00, to mark the start of a source line for the debugger
+;
+ MACRO
+&lab    profile_line &value
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $00
+        dc i'&value'
+.skip
+        MEND
+
+;...............................................................
+; Profile source line marker, with break
+;
+; Add an ORCA profiler tag.  The input is the address to the tag name.
+; This adds a cop $01, to mark the start of a source line for the debugger
+; as well as a hard-break in the ORCADebugger
+;
+ MACRO
+&lab    profile_line_break &value
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $01
+        dc i'&value'
+.skip
+        MEND
+
+;...............................................................
+; Profile function begin
+;
+; Add an ORCA profiler tag.  Adds a function begin COP instruction.
+; You must add profile_function_add_symbol to the end of the function.
+; There can only be one of these in a start/end segment
+;
+; profile_function_begin
+;
+ MACRO
+&lab    profile_function_begin
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $03
+        dc i4'ProfileFunctionName'
+.skip
+        MEND
+;...............................................................
+; Profile function end
+;
+; Add an ORCA profiler 'end function' tag.
+; It is ok to add multiple calls to this macro, if the function has
+; multiple exit points.
+;
+ MACRO
+&lab    profile_function_end
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $04
+.skip
+        MEND
+;...............................................................
+; Profile point begin
+;
+; Add an ORCA profiler tag.  The input is the address to the tag name.
+; This adds another cop $03, as if it was a function start, but this
+; is manual, so as to mark internal parts of a function.
+;
+ MACRO
+&lab    profile_point_begin &symbolname
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $03
+        dc i4'sym_&symbolname'
+.skip
+        MEND
+;...............................................................
+; Profile point end
+;
+; Add an ORCA profiler end tag.
+;
+ MACRO
+&lab    profile_point_end
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $04
+.skip
+        MEND
+
+;
+; Inner Profile macros.  These are the same as the other macros, but
+; switch on a different equate, so we can turn them off
+;
+
+;...............................................................
+; Profile add a function symbol
+;
+; This expects profile_function_begin to be called at the top
+; of the function.  This macro should be put at the bottom
+; of the function, just before the end directive
+;
+ MACRO
+&lab    profile_function_add_symbol2
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+profileFunctionName dc i1'L:&SYSNAME',C'&SYSNAME'
+.skip
+        MEND
+
+;...............................................................
+; Profile add a symbol
+;
+ MACRO
+&lab    profile_add_symbol2 &symbolname
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+sym_&symbolname dc i1'L:&symbolname',C'&symbolname'
+.skip
+        MEND
+
+;...............................................................
+; Profile function begin
+;
+; Add an ORCA profiler tag.  Adds a function begin COP instruction.
+; You must add profile_function_add_symbol to the end of the function.
+; There can only be one of these in a start/end segment
+;
+; profile_function_begin
+;
+ MACRO
+&lab    profile_function_begin2
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+        cop $03
+        dc i4'ProfileFunctionName'
+.skip
+        MEND
+;...............................................................
+; Profile function end
+;
+; Add an ORCA profiler 'end function' tag.
+; It is ok to add multiple calls to this macro, if the function has
+; multiple exit points.
+;
+ MACRO
+&lab    profile_function_end2
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+        cop $04
+.skip
+        MEND
+;...............................................................
+; Profile point begin
+;
+; Add an ORCA profiler tag.  The input is the address to the tag name.
+; This adds another cop $03, as if it was a function start, but this
+; is manual, so as to mark internal parts of a function.
+;
+ MACRO
+&lab    profile_point_begin2 &symbolname
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+        cop $03
+        dc i4'sym_&symbolname'
+.skip
+        MEND
+;...............................................................
+; Profile point end
+;
+; Add an ORCA profiler end tag.
+;
+ MACRO
+&lab    profile_point_end2
+&lab    anop
+        AIF C:debug~profile2=0,.skip
+        cop $04
+.skip
+        MEND
+
+
+
+;...............................................................
+; Profile file reference
+;
+; Add an ORCA profiler tag.
+; This adds a reference to the current file's name
+; The expects that there is a privdata segment in the file
+; with a full file name reference string, with the label LocalFileName
+; Place the profile_file_reference after a call to profile_function_begin.
+;
+; profile_file_reference
+;
+ MACRO
+&lab    profile_file_reference
+&lab    anop
+        AIF C:debug~profile=0,.skip
+        cop $06
+        dc i4'LocalFileName'
+.skip
+        MEND
+
+;...............................................................
+;...............................................................
+; Increment a value for debugging stats
+; If the debug~stats equate is 0 or undefined, nothing will be done
+; Note, if the input is a long address, A will be trashed
+;
+        macro
+&lab    debug_stats_inc &addr
+&lab    anop
+        aif  C:debug~stats=0,.skip
+        aif  C:&addr=0,.skip
+        lclc  &C
+&C      amid  &addr,1,1
+        aif   "&C"=">",.islong
+        inc &addr
+        mexit
+.islong
+        lda &addr
+        inc a
+        sta &addr
+.skip
+        mend
+;...............................................................
+; Do a jsr to an address, if the debug~stats equate is 1
+;
+        macro
+&lab    debug_stats_jsr &addr
+&lab    anop
+        aif  C:debug~stats=0,.skip
+        aif  C:&addr=0,.skip
+        jsr &addr
+.skip
+        mend
+
+;...............................................................
+; Do a jsl to an address, if the debug~stats equate is 1
+;
+        macro
+&lab    debug_stats_jsl &addr
+&lab    anop
+        aif  C:debug~stats=0,.skip
+        aif  C:&addr=0,.skip
+        jsl &addr
+.skip
+        mend

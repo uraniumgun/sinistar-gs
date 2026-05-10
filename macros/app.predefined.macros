@@ -1,0 +1,377 @@
+; Assortment of macros for the app
+; MACGEN will look at the directory that this file is in, first.
+
+; -----------------------------------------------------------------------------
+; Unrolled loop macro for looking up the velocity in a speed table.
+
+                            macro
+&lab                        speed_table_find_velocity &count,&lab_found
+&lab                        anop
+                            lcla    &index
+&index                      seta    0
+.loop
+                            cmpword {y},#target_velocity_entry~distance+(&index*sizeof~target_velocity_entry)
+                            bslt ~a&SYSCNT&index
+                            getword {y},#target_velocity_entry~velocity+(&index*sizeof~target_velocity_entry)
+                            bra &lab_found
+~a&SYSCNT&index             anop
+&index                      seta    &index+1
+                            aif     &index<&count,.loop
+.done
+                            mend
+
+; -----------------------------------------------------------------------------
+; Unrolled loop macro for looking up the acceleration in a speed table.
+
+                            macro
+&lab                        speed_table_find_acceleration &count,&lab_found
+&lab                        anop
+                            lcla    &index
+&index                      seta    0
+.loop
+                            cmpword {y},#target_velocity_entry~velocity+(&index*sizeof~target_velocity_entry)
+                            bslt ~a&SYSCNT&index
+                            getword {y},#target_velocity_entry~acceleration+(&index*sizeof~target_velocity_entry)
+                            bra &lab_found
+~a&SYSCNT&index             anop
+&index                      seta    &index+1
+                            aif     &index<&count,.loop
+.done
+                            mend
+
+
+; -----------------------------------------------------------------------------
+; inlined gameplay_responder_update_distance
+; Input is either a partial indirect definition or a register definition
+;
+; inline_responder_update_distance [<pR],[<pC]
+; inline_responder_update_distance {x},{y}
+;
+                            macro
+&lab                        inline_responder_update_distance &responder,&caller
+&lab                        anop
+                            lclc  &rtype
+                            lclc  &ctype
+&rtype                      amid  &responder,1,1
+&ctype                      amid  &caller,1,1
+
+                            aif   "&rtype"="{",.isabs
+                            aif   "&ctype"="{",.isabs
+
+; Both are indirect.  We want to prevent Y from being double loaded
+                            getword &responder,#playfield_entity~grentity+grlib_entity~x
+                            sec
+                            sbcword &caller,#same
+                            bpl ~a&SYSCNT
+                            negate a
+~a&SYSCNT                   putword &responder,#playfield_entity~caller_dist_x
+
+                            getword &responder,#playfield_entity~grentity+grlib_entity~y
+                            sec
+                            sbcword &caller,#same
+                            bpl ~b&SYSCNT
+                            negate a
+~b&SYSCNT                   putword &responder,#playfield_entity~caller_dist_y
+                            mexit
+
+; At least one is absolute
+.isabs
+                            getword &responder,#playfield_entity~grentity+grlib_entity~x
+                            sec
+                            sbcword &caller,#playfield_entity~grentity+grlib_entity~x
+                            bpl ~a&SYSCNT
+                            negate a
+~a&SYSCNT                   putword &responder,#playfield_entity~caller_dist_x
+
+                            getword &responder,#playfield_entity~grentity+grlib_entity~y
+                            sec
+                            sbcword &caller,#playfield_entity~grentity+grlib_entity~y
+                            bpl ~b&SYSCNT
+                            negate a
+~b&SYSCNT                   putword &responder,#playfield_entity~caller_dist_y
+
+                            mend
+
+; -----------------------------------------------------------------------------
+; inlined gameplay_responder_update_distance_xy
+; Input is either a partial indirect definition or a register definition
+;
+; inline_responder_update_distance_xy [<pR],dx,dy
+; inline_responder_update_distance_xy {x},dx,dy
+;
+                            macro
+&lab                        inline_responder_update_distance_xy &responder,&dx,&dy
+&lab                        anop
+
+                            getword &responder,#playfield_entity~grentity+grlib_entity~x
+                            sec
+                            sbcword &dx
+                            bpl ~a&SYSCNT
+                            negate a
+~a&SYSCNT                   putword &responder,#playfield_entity~caller_dist_x
+
+                            getword &responder,#playfield_entity~grentity+grlib_entity~y
+                            sec
+                            sbcword &dy
+                            bpl ~b&SYSCNT
+                            negate a
+~b&SYSCNT                   putword &responder,#playfield_entity~caller_dist_y
+
+                            mend
+
+; -----------------------------------------------------------------------------
+; inlined entity_target_distance, that also pushes the results on the stack.
+; Given a source and target entity, get the distance (Manhattan) to the target.
+; This just subtracts the target's coordinate from the source, giving
+; a signed distance from the source to the target.
+;
+; Input is either a partial indirect definition or a register definition
+;
+; inline_entity_push_target_distance [<pT],[<pS]
+; inline_entity_push_target_distance {x},{y}
+;
+                            macro
+&lab                        inline_entity_push_target_distance &source,&target
+&lab                        anop
+                            lclc  &rtype
+                            lclc  &ctype
+&rtype                      amid  &target,1,1
+&ctype                      amid  &source,1,1
+
+                            aif   "&rtype"="{",.isabs
+                            aif   "&ctype"="{",.isabs
+
+; Both are indirect.  We want to prevent Y from being double loaded
+                            getword &target,#playfield_entity~grentity+grlib_entity~x
+                            sec
+                            sbcword &source,#same
+                            pha
+
+                            getword &target,#playfield_entity~grentity+grlib_entity~y
+                            sec
+                            sbcword &source,#same
+                            pha
+                            mexit
+
+; At least one is absolute
+.isabs
+                            getword &target,#playfield_entity~grentity+grlib_entity~x
+                            sec
+                            sbcword &source,#playfield_entity~grentity+grlib_entity~x
+                            pha
+
+                            getword &target,#playfield_entity~grentity+grlib_entity~y
+                            sec
+                            sbcword &source,#playfield_entity~grentity+grlib_entity~y
+                            pha
+                            mend
+
+; -----------------------------------------------------------------------------
+; inline version of gameplay_entity_test_should_think
+;
+; inline_entity_test_should_think {y} or {x} or [<p]
+
+                            macro
+&lab                        inline_entity_test_should_think &entity
+
+                            clc                         ; assume it should
+                            getword &entity,#playfield_entity~state_flags
+                            bit #playfield_entity~state_on_collision_list
+                            bne ~a&SYSCNT
+
+; Maybe put the think flag in the state, so we already have the value?
+                            getword &entity,#playfield_entity~personality
+                            bit #personality~think_flag
+                            beq ~b&SYSCNT                           ; if 0, yes
+                            sec                                     ; no
+~b&SYSCNT                   eor #personality~think_flag
+                            putword &entity,#playfield_entity~personality
+~a&SYSCNT                   anop
+
+                            mend
+
+; -----------------------------------------------------------------------------
+; inline version of entity_add_to_playfield
+;
+; inline_entity_add_to_playfield {y} or {x} or {>x}or [<p]
+
+                            macro
+&lab                        inline_entity_add_to_playfield &entity
+                            lclc  &etype
+&etype                      amid  &entity,1,1
+
+                            aif   "&etype"="{",.isabs
+; Set that this is the first update
+                            getword &entity,#playfield_entity~state_flags
+                            ora #playfield_entity~state_first_update
+                            putword &entity,#same
+                            mexit
+.isabs
+; Set that this is the first update
+                            aif   "&entity"="{>x}",.islongabs
+                            getword &entity,#playfield_entity~state_flags
+                            ora #playfield_entity~state_first_update
+                            putword &entity,#playfield_entity~state_flags
+                            mexit
+
+.islongabs
+                            getword {x},>entities_root+playfield_entity~state_flags
+                            ora #playfield_entity~state_first_update
+                            putword {x},>entities_root+playfield_entity~state_flags
+
+                            mend
+
+; -----------------------------------------------------------------------------
+; Generate a random 16-bit value.
+; Using this in the app, to allow for switching between different random
+; generators easily.
+
+; generate_rnd16
+; a-reg will have the random value.  No other registers will change.
+
+                            macro
+&lab                        generate_rnd16
+                            jsl math~rnd3_generate
+                            mend
+
+; -----------------------------------------------------------------------------
+; Get a 'quick a random 16-bit value.
+; Using this in the app, to allow for switching between different random
+; generators easily.
+;
+; This will attempt to get a 'quick' random.  This should be called shortly
+; after a full generate_rnd16 call.  For some generators, that have large
+; seed values, this will return part of the seed that is not returned
+; from the full generator call.  This helps get a resonably good random value
+; from generators that are a bit on the slow side, i.e. the ORCA derived one.
+; ex. lda >math~rnd_seed+2
+; For generators that do not have a large seed or entropy in their seeds
+; the generator will just be called again.
+
+; get_quick_rnd16
+; a-reg will have the random value.  No other registers will change.
+; The status flags Z,N will be set to what is in the a-reg but do not
+; assume the carry will be the same!
+
+                            macro
+&lab                        get_quick_rnd16
+                            jsl math~rnd3_generate
+                            mend
+
+;...............................................................
+; Set a task to sleep, and return at a specified address.
+;
+; task_sleep wake_at,exit_at
+;
+; The wake_at parameter, should be a label, local to the task function
+; The exit_at, should be a label where the sleep request should go,
+; after it has setup the sleep.
+; The exit_at, is an optional label, to go to, to exit the task,
+; after the sleep request.  You can leave it off, if you don't want
+; to exit right away, or the exit is the next opcode.
+;
+; Special 'wake_at' location tags
+; here - The wake at will be the opcode, just after the task_sleep command
+; reset - Reset the wake_at, to be the top of the task.
+; continue - Leave the wake_at, to whatever it was previously.
+;            This simply goes to the exit of the task, so this
+;            command really does nothing, but is for completeness
+;
+; Sleep macros require that the task data is setup to handle storing
+; the return address.  It also requires the task to have the macro
+; task_resume, at the start of the task function, to handle the
+; transfer to the desired wake address.
+; This is going to essentially jump in to a specific address, so
+; be sure that any stack / locals, are setup correctly to
+; 'resume' the task.  It does not save any state!
+;
+; Note that the source of the task data is 'hard-coded'
+; to be <pTaskData.  It keeps the macro usaged looking
+; 'cleaner', at the expense of some flexibility
+; Maybe, make it optional, though we already have optional parameters.
+;
+                macro
+&lab            task_sleep &func,&lab_exit
+&lab            anop
+                aif     "&func"="here",.here
+                aif     "&func"="reset",.reset
+                aif     "&func"="continue",.continue
+; Store the address of func-1
+                lda     #&func-1
+                sta     [<pTaskData]
+                aif     C:&lab_exit=0,.done
+                brl     &lab_exit
+.done
+                mexit
+.here
+; Known location where the jump data is.
+                lda     #~h&SYSCNT-1                ; wake address, -1, because we will rts to it
+                sta     [<pTaskData]
+                aif     C:&lab_exit=0,.done
+                brl     &lab_exit
+.done
+~h&SYSCNT       anop
+                mexit
+.reset
+; Reset the entry point, back to the normal location
+                lda     #0
+                sta     [<pTaskData]
+                aif     C:&lab_exit=0,.done
+                brl     &lab_exit
+.done
+                mexit
+.continue
+; Leave the entry point what it was previously, and just exit
+                aif     C:&lab_exit=0,.done
+                brl     &lab_exit
+.done
+                mend
+
+;...............................................................
+; Resume a task.  This should be placed, where you want
+; a task to test for resuming from a sleep command
+; This is usually the firt thing it does, but you can put it
+; anywere, such has after some common setup code at the task
+; entry point.
+;
+; Note that the source of the task data is 'hard-coded'
+; to be <pTaskData.  It keeps the macro usaged looking
+; 'cleaner', at the expense of some flexibility
+; Maybe, make it optional, though that would be harder
+; in the sleep call
+                macro
+&lab            task_resume
+&lab            anop
+; Known location where the jump data is.
+                lda     [<pTaskData]
+                beq     ~a&SYSCNT
+                pha
+                rts                     ; using an rts as a goto, so the address needs to be -1!
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Resume a task, checking the timer first.
+; The task header must start with the timer support entries.
+; See task_resume for other details on resuming
+;
+; task_resume_timer exit_if_not_0_label
+;
+                macro
+&lab            task_resume_timer &exit
+&lab            anop
+; Known location where the jump data is.
+                ldy     #task_timer_header~timer
+                lda     [<pTaskData],y
+                beq     ~a&SYSCNT
+                dec     a
+                sta     [<pTaskData],y
+                beq     ~a&SYSCNT
+                jmp     &exit
+~a&SYSCNT       anop
+                lda     [<pTaskData]
+                beq     ~b&SYSCNT
+                pha
+                rts                     ; using an rts as a goto, so the address needs to be -1!
+~b&SYSCNT       anop
+                mend

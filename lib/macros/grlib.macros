@@ -1,0 +1,361 @@
+;
+; Unrolled word writing loop
+;
+        MACRO
+&lab    UnrolledWriteShapeToScreenLoop
+&lab    anop
+        lcla &index
+; Byte width of screen
+&index  seta 160
+.loop
+        lda |&index-2,y
+        sta >$012000+&index-2,x
+&index  seta &index-2
+        aif &index>0,.loop
+        MEND
+;
+; Unrolled shape copy loop, for block operations
+; This assumes that the entire destination address will be patched
+; The input is the desired byte offset to start from, exclusive
+;
+; It is expected that this is 160 for even word runs and 159
+; for odd word runs, with the user putting the lda/sta of
+; the odd byte in manually, after this macro.
+;
+        MACRO
+&lab    UnrolledBlockCopyShapeLineLoop &start_offset,&count
+&lab    anop
+        lcla &offset
+        lcla &index
+&offset seta &start_offset
+&index  seta &count
+.loop
+        lda |&offset-2,y
+        sta >$FFFFFF,x
+&offset seta &offset-2
+&index  seta &index-1
+        aif &index>0,.loop
+.done
+        MEND
+;
+; Unrolled block shape blit 1
+; The input mask will be and'ed with the source
+;
+        MACRO
+&lab    UnrolledBlockShapeBlit1 &start_offset,&count,&mask
+&lab    anop
+        lcla &offset
+        lcla &index
+&offset seta &start_offset
+&index  seta &count
+.loop
+        lda |&offset-2,y
+        and &mask
+        sta >$FFFFFF,x
+&offset seta &offset-2
+&index  seta &index-1
+        aif &index>0,.loop
+.done
+        MEND
+;
+; Unrolled block shape blit 2
+; This takes a source that is a pixel mask (0 or F in the pixels)
+; and colorizes the source and merges with the background.
+; Used for fonts
+;
+        MACRO
+&lab    UnrolledBlockShapeBlit2 &start_offset,&count,&mask,&temp
+&lab    anop
+        lcla &offset
+        lcla &index
+&offset seta &start_offset
+&index  seta &count
+.loop
+        lda |&offset-2,y                ; 6, get the source
+        eor #$ffff                      ; 3, make a mask.  could eliminate with a pre-generated mask
+        and >$ffffff,x                  ; 6, and with the dest
+        sta &temp                       ; 4, temp store
+        lda |&offset-2,y                ; 6, get the source, again
+        and &mask                       ; 4, colorize it. If immediate 3
+        ora &temp                       ; 4, merge with background
+        sta >$ffffff,x                  ; 6, store on background
+
+&offset seta &offset-2
+&index  seta &index-1
+        aif &index>0,.loop
+.done
+        MEND
+;
+; Unrolled block shape blit 4
+; This masks the background, then merges with the source.
+; This requires the mask slot to be patched before each use
+; with the mask offset from the source.
+;
+        MACRO
+&lab    UnrolledBlockShapeBlit4 &start_offset,&count
+&lab    anop
+        lcla &offset
+        lcla &index
+&offset seta &start_offset
+&index  seta &count
+.loop
+        lda |$ffff,y                    ; 6, get the mask. This must be patched every use!
+        and >$ffffff,x                  ; 6, and with the dest
+        ora |&offset-2,y                ; 6, merge the source
+        sta >$ffffff,x                  ; 6, store on dest
+
+&offset seta &offset-2
+&index  seta &index-1
+        aif &index>0,.loop
+.done
+        MEND
+;
+; Unrolled copy loop, for block operations
+; This assumes that the entire address will be patched
+;
+        MACRO
+&lab    UnrolledBlockCopyLineLoop &count
+&lab    anop
+        lcla &index
+&index  seta &count
+.loop
+        lda >$012000,x
+        sta >$012000,x
+&index  seta &index-1
+        aif &index>0,.loop
+        MEND
+;
+; store A loop, unrolled
+; This assumes that the entire address will be patched
+;
+        MACRO
+&lab    StoreLineLoop &count
+&lab    anop
+        lcla &index
+&index  seta &count
+.loop
+        sta >$dddddd,x
+&index  seta &index-1
+        aif &index>0,.loop
+        MEND
+;
+; PHA loop, unrolled
+;
+        MACRO
+&lab    PHALineLoop &count
+&lab    anop
+        lcla &index
+&index  seta &count
+.loop
+        pha
+&index  seta &index-1
+        aif &index>0,.loop
+        MEND
+;
+; Fake PEI copy loop, for block operations
+;
+        MACRO
+&lab    FakePEIBlockCopyLineLoop
+&lab    anop
+        lcla &index
+&index  seta 160
+.loop
+        sta >$012000+&index-2,x
+&index  seta &index-2
+        aif &index>0,.loop
+        MEND
+;
+; PEI copy loop, for block operations
+;
+        MACRO
+&lab    PEIBlockCopyLineLoop
+&lab    anop
+        lcla &index
+&index  seta 160
+.loop
+        pei $00+&index-2
+&index  seta &index-2
+        aif &index>0,.loop
+        MEND
+;
+; Unrolled patching of the mask load
+;  'patchoffset' - offset from the 'from' value to start
+;  'opsize' - number of opcode bytes in the sequence.
+;  'opcount' - number of sequences
+;  'from' - the address to patch from
+;
+; The acc should have the end address of the mask line data
+; The patching will subtract 2 per sequence entry.
+;
+        macro
+&lab    UnrolledPatchMaskLoad &patchoffset,&opsize,&opcount,&from
+&lab    anop
+        lcla &offset
+        lcla &index
+        lcla &count
+        lcla &size
+        lcla &poffset
+&size   seta &opsize
+&count  seta &opcount
+&offset seta &size*&count
+&index  seta &opcount
+&poffset seta &patchoffset
+.loop
+        sta |&from-&offset+&poffset
+        sbc #2
+
+&offset seta &offset-&size
+&index  seta &index-1
+        aif &index>0,.loop
+
+        mend
+;
+; Multiply Lookup
+; Makes a 16 bit lookup multiplication table for a multiplier, for a specified length
+;
+        MACRO
+&lab    MakeMultiplyLookup &multiplier,&count
+&lab    anop
+        lcla &value
+        lcla &index
+.loop
+&value seta &multiplier*&index
+        dc i'&value'
+&index  seta &index+1
+        aif &index<&count,.loop
+        MEND
+;
+; Multiply Lookup Inverted.
+; Makes a 16 bit lookup multiplication table for a multiplier, for a specified length
+; The value is inverted
+;
+        MACRO
+&lab    MakeMultiplyLookupInverted &multiplier,&count
+&lab    anop
+        lcla &value
+        lcla &index
+.loop
+&value seta (&multiplier*&index)*-1
+        dc i'&value'
+&index  seta &index+1
+        aif &index<&count,.loop
+        MEND
+
+;
+; Unrolled block stz
+;
+; Parameters:
+; where - the short address of the base of the block
+; width - byte width, should be power of 2, we are doing words!
+; height - height in screen lines
+                macro
+&lab            UnrolledBlockSTZ &where,&width,&height
+&lab            anop
+                lcla &offset
+                lcla &voffset
+                lcla &wcounter
+                lcla &hcounter
+
+&hcounter       seta &height
+&voffset        seta 0
+.loop2
+                actr 160+2
+&offset         seta &voffset
+&wcounter       seta &width
+.loop1
+                stz &where+&offset
+&offset         seta &offset+2
+&wcounter       seta &wcounter-2
+                aif &wcounter>0,.loop1
+&voffset        seta &voffset+160
+&hcounter       seta &hcounter-1
+                aif &hcounter>0,.loop2
+                mend
+
+;
+; Unrolled block tsb
+; This is used to load/store a block of memory to force the
+; shadowing to copy from fast-ram to video ram.
+; Load the a-reg with 0, before calling!
+;
+; Parameters:
+; where - the short address of the base of the block
+; width - byte width, should be power of 2, we are doing words!
+; height - height in screen lines
+                macro
+&lab            UnrolledBlockTSB &where,&width,&height
+&lab            anop
+                lcla &offset
+                lcla &voffset
+                lcla &wcounter
+                lcla &hcounter
+
+&hcounter       seta &height
+&voffset        seta 0
+.loop2
+                actr 160+2
+&offset         seta &voffset
+&wcounter       seta &width
+.loop1
+                tsb &where+&offset
+&offset         seta &offset+2
+&wcounter       seta &wcounter-2
+                aif &wcounter>0,.loop1
+&voffset        seta &voffset+160
+&hcounter       seta &hcounter-1
+                aif &hcounter>0,.loop2
+                mend
+
+; .............................................................
+; A macro to help simplify turning the SHR shadowing on/off
+; as well as optionally saving/setting the databank
+; shr_shadow on/off,push/pop
+;
+; shr_shadow on                 just set the shadowing on
+; shr_shadow on,push            set the shadowing on, and save the databank, and then set the databank to 1
+; shr_shadow on,set             set the shadowing on, then set the databank to 1, no saving of the databank
+; shr_shadow off                set the shadowing off
+; shr_shadow off,pop            set the shadowing off, and pop the saved databank
+                macro
+&lab            shr_shadow &state,&setbank
+&lab            anop
+                aif "&state"="on",.on
+                aif "&state"="off",.off
+                mnote 'Expecting on or off as a parameter',1
+                mexit
+.on
+                shortm
+                lda >$00c035                            ; ssw~shadow
+                and #%11110111                          ; ssw~shadow~shr_inhibit
+                sta >$00c035                            ; ssw~shadow
+                aif C:&setbank=0,.next
+                aif "&setbank"="push",.do_push
+                aif "&setbank"="set",.do_set
+                mnote 'Expecting push or set as a parameter',1
+                mexit
+.do_push
+                phb
+.do_set
+                lda #$01
+                pha
+                plb
+.next
+                longm
+                mexit
+
+.off
+                shortm
+                lda >$00c035                            ; ssw~shadow
+                ora #%00001000                          ; ssw~shadow~shr_inhibit
+                sta >$00c035                            ; ssw~shadow
+                aif C:&setbank=0,.next
+                aif "&setbank"="pop",.do_pop
+                mnote 'Expecting pop as a parameter',1
+                mexit
+.do_pop
+                plb
+.next
+                longm
+                mend
+
+

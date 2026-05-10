@@ -1,0 +1,19 @@
+;...............................................................
+; The unrolled load data and store to the DOC register
+;...............................................................
+                macro
+&lab            unrolled_sound_data_loop &dest,&count
+&lab            anop
+                lcla    &index
+                lcla    &offset
+&index          seta    &count
+&offset         seta    0
+.loop
+                lda     |&offset,x
+                sta     &dest
+                actr    100
+&offset         seta    &offset+1
+&index          seta    &index-1
+                aif     &index>0,.loop
+.done
+                mend

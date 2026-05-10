@@ -1,0 +1,3767 @@
+;............................................................
+;
+;        Is the pointer (4 bytes) null
+;        Only supports, a simple address and [zp],y
+;        Could try and support, address,y and address,x, but specifying what
+;        register to use mucks things up.
+;
+;    testptr address             - tests address and address+2
+;    testptr [DP],offset   - tests the pointer at the indirect address plus the offset
+;...............................................................
+                macro
+&lab            testptr &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &toffset
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'testptr - Unsupported addressing mode',1
+                mexit
+.nooffset
+                lda     &addr+2
+                ora     &addr
+                mexit
+.indirect
+; See if the offset is immediate or a memory value
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_not_immediate
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset=0,.toffset_imm_zero
+                ldy     #&toffset+2
+                lda     &addr,y
+                ldy     #&toffset
+                ora     &addr,y
+                mexit
+.toffset_imm_zero
+                ldy     #&toffset+2
+                lda     &addr,y
+                ora     &addr
+                mexit
+.toffset_not_immediate
+                ldy     &toffset
+                lda     &addr,y
+                iny
+                iny
+                ora     &addr,y
+                mend
+;............................................................
+;
+; Clear a pointer
+;
+;    clearptr address             - clears address and address+2
+;    clearptr [DP],offset   - clear the pointer at the indirect address and offset.
+;...............................................................
+                macro
+&lab            clearptr &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &toffset
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'clearptr - Unsupported addressing mode',1
+                mexit
+.nooffset
+                stz  &addr
+                stz  &addr+2
+                mexit
+.indirect
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_mem_addr
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset=0,.toffset_imm_zero
+                lda     #0
+                ldy     #&toffset
+                sta     &addr,y
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_imm_zero
+                lda     #0
+                sta     &addr
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_mem_addr
+                lda     #0
+                ldy     &toffset
+                sta     &addr,y
+                iny
+                iny
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Clear a dword
+;
+;    dword address             - clears address and address+2
+;    dword [DP],offset   - clear the pointer at the indirect address and offset.
+;...............................................................
+                macro
+&lab            cleardword &addr,&offset
+&lab            anop
+                clearptr &addr,&offset
+                mend
+;............................................................
+;
+; Put what is currently in A, into the low word of a long
+; This is essentially putword, but gives context of what is happening
+;
+;    putlonglow address             - writes to address
+;    putlonglow [DP],offset   - writes to the indirect address, plus the offset
+;    putlonglow {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                                   - ex.  putlonglow {y},#myoffset  = sta |myoffset,y
+;...............................................................
+                macro
+&lab            putlonglow &addr,&offset
+&lab            anop
+                putptrlow &addr,&offset
+                mend
+;............................................................
+;
+; Put what is currently in A, into the high word of a long
+; This is essentially putword, but gives context of what is happening
+; as well as helps prevent forgetting to do a +2 on the offset or address
+;
+;    putlonghigh address             - writes to address
+;    putlonghigh [DP],offset   - writes to the indirect address, plus the offset + 2
+;    putlonghigh {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                                    - ex.  putlonghigh {y},#myoffset  = sta |myoffset+2,y
+;...............................................................
+                macro
+&lab            putlonghigh &addr,&offset
+&lab            anop
+                putptrhigh &addr,&offset
+                mend
+;............................................................
+;
+; Put what is currently in A, into a pointer.
+; Useful when A has 0 in it, and you want to clear multiple pointers
+;
+;    putptr address             - writes to address and address+2
+;    putptr [DP],offset   - writes to the indirect address, plus the offset
+;    putptr {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                               - ex.  putptr {y},#myoffset  = sta |myoffset,y
+;...............................................................
+                macro
+&lab            putptr  &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putptr - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                sta     &addr+2
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                sta     &sizef&toffset,&R
+                sta     &sizef&toffset+2,&R
+                mexit
+.regnooffset
+                mnote 'putptr - Register addressing needs offset',1
+                mexit
+; Indirect addressing.
+.indirect
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset<>0,.toffset_immediate
+; Offset is 0, so we can just use non-indexed addressing
+                sta     &addr
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_immediate
+                ldy     #&toffset
+                sta     &addr,y
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_no_hash
+                ldy     &toffset
+                sta     &addr,y
+                iny
+                iny
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Put what is currently in A, into the low word of a pointer
+; This is essentially putword, but gives context of what is happening
+;
+;    putptrlow address             - writes to address
+;    putptrlow [DP],offset   - writes to the indirect address, plus the offset
+;    putptrlow {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                                  - ex.  putptrlow {y},#myoffset  = sta |myoffset,y
+;...............................................................
+                macro
+&lab            putptrlow &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putptrlow - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                sta     &sizef&toffset,&R
+                mexit
+.regnooffset
+                mnote 'putptrlow - Register addressing needs offset',1
+                mexit
+; Indirect addressing.
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset<>0,.toffset_immediate
+; Offset is 0, so we can just use non-indexed addressing
+                sta     &addr
+                mexit
+.toffset_immediate
+                ldy     #&toffset
+                sta     &addr,y
+                mexit
+.toffset_no_hash
+                ldy     &toffset
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Put what is currently in A, into the high word of a pointer
+; This is essentially putword, but gives context of what is happening
+; as well as helps prevent forgetting to do a +2 on the offset or address
+;
+;    putptrhigh address             - writes to address
+;    putptrhigh [DP],offset   - writes to the indirect address, plus the offset + 2
+;    putptrhigh {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                                   - ex.  putptrhigh {y},#myoffset  = sta |myoffset+2,y
+;...............................................................
+                macro
+&lab            putptrhigh &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putptrhigh - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr+2
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                sta     &sizef&toffset+2,&R
+                mexit
+.regnooffset
+                mnote 'putptrhigh - Register addressing needs offset',1
+                mexit
+; Indirect addressing.
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_no_hash
+                ldy     &toffset+2
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Put what is currently in A and X, into a pointer.
+; Useful when a sub returns a pointer value
+;
+;    putretptr address             - writes to address and address+2, note, if it is long addressing, this will destroy what is in A
+;    putretptr [DP],offset   - writes to the indirect address, plus the offset.  Note that this will destroy what is in A
+;...............................................................
+                macro
+&lab            putretptr &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &toffset
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     C:&offset=0,.nooffset
+                mnote 'putretptr - Unsupported addressing mode',1
+                mexit
+.nooffset
+                aif     "&C"=">",.longaddressing
+                sta     &addr
+                stx     &addr+2
+                mexit
+.longaddressing
+                sta     &addr
+                txa
+                sta     &addr+2
+                mexit
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+.toffset_no_hash
+                ldy     #&toffset
+                sta     &addr,y
+                txa
+                ldy     #&toffset+2
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Push what is currently in A and X onto the stack. (X first, then A)
+; Useful when a sub returns a pointer value and you want to immediately push it
+;
+;    pushretptr
+;...............................................................
+                macro
+&lab            pushretptr
+&lab            anop
+                phx
+                pha
+                mend
+;............................................................
+;
+; Put what is currently in A, into a long.
+; This is the same as putptr
+;
+;    putlong address             - writes to address and address+2
+;    putlong [DP],offset   - writes to the indirect address, plus the offset
+;...............................................................
+                macro
+&lab            putlong &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &toffset
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putlong - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                sta     &addr+2
+                mexit
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset<>0,.toffset_immediate
+; Offset is 0, so we can just use non-indexed addressing
+                sta     &addr
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_immediate
+                ldy     #&toffset
+                sta     &addr,y
+                ldy     #&toffset+2
+                sta     &addr,y
+                mexit
+.toffset_no_hash
+                ldy     &toffset
+                sta     &addr,y
+                ldy     &toffset+2
+                sta     &addr,y
+                mend
+;............................................................
+;
+; Put what is currently in A, into a word.
+; Primary use is with the [DP],offset addressing, as it allows
+; for the ldy to be hidden, and it will also exclude the ldy and use
+; no indexing, if the offset resolves to 0
+;
+;    putword address             - writes to address
+;    putword [DP],offset   - writes to the indirect address, plus the offset, which is loaded into Y
+;    putword {r},offset          - writes, assuming the register, either x or y, has the bank relative address
+;                                - ex.  putword {y},#myoffset  = sta |myoffset,y
+;
+; For the indirect addressing, the immediate offset supports the keyword #same, which
+; means that it will use the last y register value used in a previous getword putword macro
+; Be careful with this.  It is in macro expansion order, not execution order!
+;...............................................................
+                macro
+&lab            putword &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &toffset
+                lclc    &sizef
+                lclb    &issameoffset
+; track the last offset we use for the y register
+                aif     C:&glastyoffset>0,.past
+                gblc    &glastyoffset
+.past
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putword - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                mexit
+
+;;;; Register based addressing
+
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                sta     &sizef&toffset,&R
+                mexit
+.regnooffset
+                mnote 'putword - Register addressing needs offset',1
+                mexit
+
+; Indirect addresing
+
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_not_immediate
+
+; Offset is immediate
+
+&toffset        amid    &toffset,2,L:&toffset-1
+
+; Are we trying to use the 'same' offset from last time?
+
+                aif     "&toffset"<>"same",.toffset_not_same
+&toffset        setc    &glastyoffset
+&issameoffset   setb 1
+                ago     .toffset_is_same
+
+.toffset_not_same
+&glastyoffset   setc    &toffset
+
+.toffset_is_same
+                aif     &toffset<>0,.toffset_not_0
+; Offset is 0, so we can just use non-indexed addressing
+                sta     &addr
+                mexit
+.toffset_not_0
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                sta     &addr,y
+                mexit
+
+.toffset_not_immediate
+                ldy     &toffset
+                sta     &addr,y
+                mend
+
+;............................................................
+;
+; Put a zero, into a word.
+; Note that this is explicitly trying to use the stz opcode
+; but keeping with the macro format, as well as insuring that
+; the acc is not changed.
+; It doesn't support a lot of addressing modes as a result
+; For addressing modes, where the acc needs to have a zero
+; it is best to just load the 0, and use putword
+;
+;    putzero address             - stz to address
+;    putzero {r},offset          - stz, assuming the register, just x is supported, has the bank relative address
+;                                - ex.  putzero {x},#myoffset  = stz |myoffset,x
+;...............................................................
+                macro
+&lab            putzero &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &addroffset
+&C              amid    &addr,1,1
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putzero - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&addroffset     setc    &offset
+&C              amid    &addroffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&addroffset     amid    &addroffset,2,L:&addroffset-1
+.regoffnohash
+                stz     |&addroffset,&R
+                mexit
+.regnooffset
+                mnote 'putzero - Register addressing needs offset',1
+                mend
+
+;............................................................
+;
+; Put a zero, into a ptr.
+; Note that this is explicitly trying to use the stz opcode
+; but keeping with the macro format, as well as insuring that
+; the acc is not changed.
+; It doesn't support a lot of addressing modes as a result
+; For addressing modes, where the acc needs to have a zero
+; it is best to just load the 0, and use putword
+;
+;    putzeroptr address             - stz to address and address+2
+;    putzeroptr {r},offset          - stz, assuming the register, just x is supported, has the bank relative address
+;                                   - ex.  putzero {x},#myptr  = stz |myptr,x and stz |myptr+2,x
+;...............................................................
+                macro
+&lab            putzeroptr &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &addroffset
+&C              amid    &addr,1,1
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'putzeroptr - Unsupported addressing mode',1
+                mexit
+.nooffset
+                sta     &addr
+                sta     &addr+2
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&addroffset     setc    &offset
+&C              amid    &addroffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&addroffset     amid    &addroffset,2,L:&addroffset-1
+.regoffnohash
+                stz     |&addroffset,&R
+                stz     |&addroffset+2,&R
+                mexit
+.regnooffset
+                mnote 'putzeroptr - Register addressing needs offset',1
+                mend
+
+;............................................................
+;
+; Compare what is currently in A, to a word.
+; Primary use is with the [DP],offset addressing, as it allows
+; for the ldy to be hidden, and it will also exclude the ldy and use
+; no indexing, if the offset resolves to 0
+;
+;    cmpword address             - compares to address
+;    cmpword [DP],offset   - compares to the indirect address, plus the offset, which is loaded into Y
+;    cmpword {r},offset          - compares, using register addressing, relative to the current bank
+;...............................................................
+                macro
+&lab            cmpword &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'cmpword - Unsupported addressing mode',1
+                mexit
+.nooffset
+                cmp  &addr
+                mexit
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                cmp     &sizef&toffset,&R
+                mexit
+.regnooffset
+                mnote 'cmpword - Register addressing needs offset',1
+                mexit
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset<>0,.toffset_immediate
+; Offset is 0, so we can just use non-indexed addressing
+                cmp     &addr
+                mexit
+.toffset_immediate
+                ldy     #&toffset
+                cmp     &addr,y
+                mexit
+.toffset_no_hash
+                ldy     &toffset
+                cmp     &addr,y
+                mend
+
+;............................................................
+;
+; iny_dword
+;
+;    iny_dword value             - increment Y, store it in value, and if y crossed to 0, increment value+2
+;    iny_dword value,address     - increment Y, store it in value, and if y crossed to 0, increment value+2
+;                                  Also increment address+2
+;                                  This is useful when the first dword value is an index
+;                                  into the address
+;...............................................................
+                macro
+&lab            iny_dword &value,&address
+&lab            anop
+                aif     C:&address=0,.noaddress
+                iny
+                sty     &value
+                bne     ~a&SYSCNT
+                inc     &address+2
+                inc     &value+2
+~a&SYSCNT anop
+                mexit
+.noaddress
+                iny
+                sty     &value
+                bne     ~a&SYSCNT
+                inc     &value+2
+~a&SYSCNT anop
+                mend
+;...............................................................
+; iny n numbers of times.
+; This does not use the acc, it just puts in n number of iny instructions
+;
+                macro
+&lab            inyn    &count
+&lab            anop
+                lcla    &index
+&index          seta    &count
+.loop
+                iny
+&index          seta    &index-1
+                aif     &index>0,.loop
+.done
+                mend
+
+;............................................................
+;
+;   incword
+;
+;    incword address                    - increment at address
+;    incword [DP],offset          - increment at location, with offset.
+;                                          Destroys what is in ACC.
+;...............................................................
+                macro
+&lab            incword &addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &toffset
+&C              amid    &addr,1,1
+                aif     "&C"="[",.indirect
+                aif     C:&offset=0,.nooffset
+                brk
+                mnote 'incword - Unsupported addressing mode',1
+                mexit
+.nooffset
+                inc  &addr
+                mexit
+.indirect
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_mem_addr
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     &toffset=0,.toffset_imm_zero
+                ldy     #&toffset
+                lda     &addr,y
+                inc a
+                sta     &addr,y
+                mexit
+.toffset_imm_zero
+                lda     &addr
+                inc a
+                sta     &addr
+                mexit
+.toffset_mem_addr
+                ldy     &toffset
+                lda     &addr,y
+                inc a
+                sta     &addr,y
+                mend
+;............................................................
+;
+; incdword
+;
+;    incdword value             - increment a dword
+;    incdword value,address     - increment a dword, and if the
+;                                  first dword crosses the word boundry, increment address+2
+;                                  This is useful when the first dword value is an index
+;                                  into the address
+;...............................................................
+                macro
+&lab            incdword &value,&address
+&lab            anop
+                aif     C:&address=0,.noaddress
+                inc &value
+                bne ~a&SYSCNT
+                inc &address+2
+                inc &value+2
+~a&SYSCNT anop
+                mexit
+.noaddress
+                inc &value
+                bne ~a&SYSCNT
+                inc &value+2
+~a&SYSCNT anop
+                mend
+;............................................................
+;
+; increment the value if the carry is set.
+;
+;    inccs value                 - increment value if the carry flag is set.
+;...............................................................
+                macro
+&lab            inccs &value
+&lab            anop
+                bcc ~a&SYSCNT
+                inc &value
+~a&SYSCNT anop
+                mend
+;............................................................
+;
+; decrement the value if the carry is set.
+;
+;    deccs value                 - increment value if the carry flag is set.
+;...............................................................
+                macro
+&lab            deccs &value
+&lab            anop
+                bcc ~a&SYSCNT
+                dec &value
+~a&SYSCNT       anop
+                mend
+;............................................................
+;
+; Negate a value
+;
+;    negate value                 - negate a value
+; Value can be a, to negate the accumulator
+;...............................................................
+                macro
+&lab            negate &value
+&lab            anop
+                aif     "&value"="a",.param_acc
+                mnote 'Unsupported parameter, &value',1
+                mexit
+.param_acc
+                eor #$ffff
+                inc a
+                mend
+
+;...............................................................
+; Helper macro for the 16 bit multiply
+; Note, assumes op2 is the value - 1, so we can skip the clc
+                macro
+&lab            mul16_step &op1,&op2,&result
+&lab            anop
+                lsr &op1                ; test the LSB
+                bcc ~a&SYSCNT           ; br if it is off
+                adc     &op2                ; add in partial product
+~a&SYSCNT       ror a                 ; multiply answer by 2
+                ror &result
+                mend
+
+;...............................................................
+; Macro to use the lookup tables to do a A x B multiply
+; The 16-bit registers are used, but the input values
+; must be 0-255 for a correct result.
+;
+; This assumes that the multiplcand (A) is in the ACC already
+; This also requires the user to have a 'using math_tables' in the function
+; that uses this macro.
+;
+; The location of B, must be specified as a parameter
+; B can be an immediate value
+; The value of B will not be changed, if it is a memory value
+; The X register will be used.
+; The result will be in the ACC.
+;
+; ex.
+;       inline~umul1r2 #10       mulitply by 10
+;       inline~umul1r2 <vB       multiply by the DP value vB
+;
+; The location of A can optionally be specifed
+; If the value for where A is, is not specified, the stack is used as a temporary to hold A
+; If the value Y is used, it is assumed that the Y register can be used as a temporary.
+; Any other value will be used as an address to re-load A, with the stack being used for intermediate results
+;
+; ex.
+;       inline~umul1r2 <vB,A      multiply by the value in vB, using the stack as a temporary
+;       inline~umul1r2 <vB,<vA    multiply by the value in vB, re-fetching A from the DP value in <vA.  Uses stack for temporary as well.
+;       inline~umul1r2 <vB,Y      multiply by the value in vB, using the Y register as a temporary, no stack usage
+;
+; The types have slight speed differences, with full stack usage version the slowest
+; The re-fetch of A from a location is slightly faster
+; The use of Y as a temporary is the fastest.
+;
+                macro
+&lab            inline~umul1r2 &mulB,&mulA
+&lab            anop
+
+                aif C:&mulB=0,.no_b
+                aif C:&mulA=0,.no_a
+                aif "&mulA"="Y",.use_y
+
+; A was specified, we still assume A is in the ACC already
+; Using DP values for A and B, 51-55 cycles, save 4 cycles if B is immediate.
+; 28 bytes, for DP values
+                clc                                     ; 2
+                adc &mulB                               ; ?
+                asl a                                   ; 2
+                tax                                     ; 2
+                lda &mulA                               ; ?
+                sec                                     ; 2
+                sbc &mulB                               ; ?
+                bcs ~a&SYSCNT                           ; 2-3
+                eor #$ffff                              ; 3, this is a squared lookup, so always positive.
+                inc a                                   ; 2
+~a&SYSCNT       asl a                                   ; 2
+                pha                                     ; 4, save for later
+                lda >math~squared_512_div4,x            ; 6
+                sec                                     ; 2
+                plx                                     ; 5
+                sbc >math~squared_512_div4,x            ; 6
+                mexit
+
+; We are allowed to use Y as a temporary
+; Using a DP value for B, 45-48 cycles, save 4 cycles if B is immediate.
+; 28 bytes, for DP values
+.use_y
+                tay                                     ; 2
+                clc                                     ; 2
+                adc &mulB                               ; ?
+                asl a                                   ; 2
+                tax                                     ; 2
+                tya                                     ; 2
+                sec                                     ; 2
+                sbc &mulB                               ; ?
+                bcs ~a&SYSCNT                           ; 2-3
+                eor #$ffff                              ; 3, this is a squared lookup, so always positive.
+                inc a                                   ; 2
+~a&SYSCNT       asl a                                   ; 2
+                tay                                     ; 2, save for later
+                lda >math~squared_512_div4,x            ; 6
+                sec                                     ; 2
+                tyx                                     ; 2
+                sbc >math~squared_512_div4,x            ; 6
+                mexit
+
+; No A specified, or specified as A, so we save the incoming A on the stack
+; Using a DP value for B, 55-58, save 4 cycles if B is immediate.
+; 28 bytes, for DP values
+.no_a
+                pha                                     ; 4
+                clc                                     ; 2
+                adc &mulB                               ; ?
+                asl a                                   ; 2
+                tax                                     ; 2
+                pla                                     ; 5
+                sec                                     ; 2
+                sbc &mulB                               ; ?
+                bcs ~a&SYSCNT                           ; 2-3
+                eor #$ffff                              ; 3, this is a squared lookup, so always positive.
+                inc a                                   ; 2
+~a&SYSCNT       asl a                                   ; 2
+                pha                                     ; 4, save for later
+                lda >math~squared_512_div4,x            ; 6
+                sec                                     ; 2
+                plx                                     ; 5
+                sbc >math~squared_512_div4,x            ; 6
+                mexit
+.no_b
+                mnote 'umul1r2 - requires B parameter',1
+                mend
+
+;...............................................................
+; Call a local subroutine
+; This uses the PER opcode to push a return address and does
+; a BRL to the locally defined function, inside the current segment
+; The local subroutine can then use an RTS to get back to the caller
+; This is allows a local bit of code to get called, and still have
+; access to all the local values from the calling routine
+;
+; To be honest, I don't think I need this, I can just jsr
+; to something in the segment.  This is nice that is position
+; independent code, and it doesn't need linker fixup,
+; but that is not an issue on the IIgs.
+                macro
+&lab            jslocal &func
+&lab            anop
+                per ~a&SYSCNT-1
+                brl &func
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; A helper macro for defining a local subroutine.
+; Overall, it does nothing, other than help identify that the code
+; is the start of a local subroutine.
+                macro
+&lab            localsub
+&lab            anop
+                mend
+
+;...............................................................
+; Embed a debugger tag, then JSL to a function that has that tag name
+
+                macro
+&lab            callsub &func
+&lab            anop
+                brl     ~a&SYSCNT
+                dc      i1'$71',i1'$77'
+                dc      i1'L:&func',C'&func'
+~a&SYSCNT       jsl     &func
+                mend
+
+;...............................................................
+;
+; Print a note
+;       asm_message message
+;...............................................................
+
+                macro
+&lab            asm_message &msg
+&lab            anop
+                lclc    &C
+&C              setc    &msg
+&lab            anop
+                mnote '&C'
+                mend
+
+;...............................................................
+;
+; Static Assert macro for comparing two compile time values
+; This will print an error message if the two values are not equal.
+; This is useful for testing to see if some gequ is a specific assumed
+; value, such as 0, which is helpful when dropping the y index off
+; of a lda [zp] for the first parameter
+;
+;       static_assert_equal vector_size,0
+;...............................................................
+
+                macro
+&lab            static_assert_equal &value1,&value2
+&lab            anop
+                aif     &value1=&value2,.ok
+                mnote 'Static Assert Failed &value1 = &value2',1
+.ok
+                mend
+;...............................................................
+;
+; Static Assert macro for comparing two compile time values
+;
+;       static_assert_not_equal vector_size,0
+;...............................................................
+
+                macro
+&lab            static_assert_not_equal &value1,&value2
+&lab            anop
+                aif     &value1<>&value2,.ok
+                mnote 'Static Assert Failed &value1 <> &value2',1
+.ok
+                mend
+
+;...............................................................
+;
+; Static Assert macro for comparing two compile time values
+;
+;       static_assert_greater_than vector_size,0
+;...............................................................
+
+                macro
+&lab            static_assert_greater_than &value1,&value2
+&lab            anop
+                aif     &value1>&value2,.ok
+                mnote 'Static Assert Failed &value1 > &value2',1
+.ok
+                mend
+;...............................................................
+;
+; Static Assert macro for comparing two compile time values
+;
+;       static_assert_less_than vector_size,0
+;...............................................................
+
+                macro
+&lab            static_assert_less_than &value1,&value2
+&lab            anop
+                aif     &value1<&value2,.ok
+                mnote 'Static Assert Failed &value1 < &value2',1
+.ok
+                mend
+;............................................................
+;
+; Push a short word, 2 bytes, onto the stack
+; This optionally adds a value to the value that is pushed
+; This is fairly analogous to the pushword from Apple, however
+; it supports a few more parameters, and also detects if the
+; input was a DP value and uses PEI, which Apple's doesn't
+; This also assumes that the addressing mode is LONGA
+;
+;    pushsword address             - push contents of address
+;    pushsword address,offset      - push contents of address + offset.
+;    pushsword #address/const      - push address or constant
+;    pushsword [DP],offset,offset2   - push using indirect address, offset is put in y, and used for [zp],y, offset2 is added, if there.
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;    pushsword {r},offset,offset2  - push using register addressing
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;...............................................................
+                macro
+&lab            pushsword &addr,&offset,&offset2
+&lab            anop
+                aif (S:LONGA),.ok_addressing
+                mnote 'Requires Addressing mode to be longa',1
+                mexit
+.ok_addressing
+                lclc    &C
+                lclc    &D
+                lclc    &R
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="#",.immediate
+                aif     C:&offset=0,.nooffset
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+; ----------------
+; Absolute addressing
+; What kind of offset is it?
+&D              amid    &offset,1,1
+                aif     "&D"<>"#",.mem_offset
+; It's an immediate offset, strip off the hash
+&immoffset      setc    &offset
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+                aif     &immoffset=0,.nooffset
+                clc
+                lda     &addr
+                adc     #&immoffset
+                pha
+                mexit
+.mem_offset
+                clc
+                lda     &addr
+                adc     &offset
+                pha
+                mexit
+.nooffset
+                aif     "&C"="<",.noffset_zp
+; Use Apple's pushword, if no parameters, it will do some parsing for us
+.immediate
+                pushword  &addr
+                mexit
+.noffset_zp
+; zero page, so we can use pei
+                pei  &addr
+                mexit
+; ----------------
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                aif     C:&offset2=0,.regnooffset2
+&C              amid    &offset2,1,1
+                aif     "&C"="<",.regoffset2_memvalue
+                aif     "&C"="|",.regoffset2_memvalue
+                aif     "&C"=">",.regoffset2_memvalue
+                aif     "&C"="[",.regoffset2_memvalue
+; offset2 is an immediate value
+; Strip the # off any constant offset
+&immoffset setc    &offset2
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.regimmoffset_no_hash
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+.regimmoffset_no_hash
+                clc
+                lda     &sizef&toffset,&R
+                adc     #&immoffset
+                pha
+                mexit
+.regoffset2_memvalue
+                clc
+                lda     &sizef&toffset,&R
+                adc     &offset2
+                pha
+                mexit
+.regnooffset2
+                lda     &sizef&toffset,&R
+                pha
+                mexit
+.regnooffset
+                mnote 'pushsword - Register addressing needs offset',1
+                mexit
+; ----------------
+; Indirect addressing
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+.toffset_no_hash
+                aif     C:&offset2=0,.nooffset2
+&C              amid    &offset2,1,1
+                aif     "&C"="<",.offset2_memvalue
+                aif     "&C"="|",.offset2_memvalue
+                aif     "&C"=">",.offset2_memvalue
+                aif     "&C"="[",.offset2_memvalue
+; offset2 is an immediate value
+; Strip the # off any constant offset
+&immoffset      setc    &offset2
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.immoffset_no_hash
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+.immoffset_no_hash
+                aif     &toffset=0,.offset2_imm_zero
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     #&immoffset
+                pha
+                mexit
+.offset2_imm_zero
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                clc
+                lda     &addr
+                adc     #&immoffset
+                pha
+                mexit
+.offset2_memvalue
+; offset2 is a memory value.  Note, we assume the offset2 is just a word value!
+                aif     &toffset=0,.offset2_imm_zero_mem
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     &offset2
+                pha
+                mexit
+.offset2_imm_zero_mem
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                clc
+                lda     &addr
+                adc     &offset2
+                pha
+                mexit
+.nooffset2
+                aif     &toffset=0,.nooffset2_imm_zero
+                ldy     #&toffset
+                pushword &addr,y
+                mexit
+.nooffset2_imm_zero
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                pushword &addr
+                mend
+
+;...............................................................
+; Pull 4 bytes off the stack
+; This is an alias of pulllong
+;...............................................................
+                macro
+&lab            pulldword &SYSOPR
+&lab            anop
+                pulllong &SYSOPR
+                mend
+
+;...............................................................
+; Push 4 bytes onto the stack
+; This is an alias of pushptr
+;...............................................................
+                macro
+&lab            pushdword &SYSOPR
+&lab            anop
+                pushptr &SYSOPR
+                mend
+
+;............................................................
+;
+;        Push ptr/long/address (4 bytes) onto stack
+;        This optionally adds a value to the value that is pushed
+;
+;    pushptr address             - push contents of address
+;    pushptr address,offset      - push contents of address + offset.  This assumes the offset is just a word! This will overwrite the context of the y register
+;    pushptr #address/const      - push address or constant
+;    pushptr [DP],offset,offset2   - push using indirect address, offset is put in y, and used for [zp],y, offset2 is added, if there.
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;                                          This will overwrite the context of the x register.  Could make it just re-use y, by using some extra stack instructions.
+;    pushptr {r},offset,offset2   - push using register addressing, offset2 is added, if there.
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;                                          This will overwrite the context of the x register.  Could make it just re-use y, by using some extra stack instructions.
+;                                          Unlike the these other variation, since this is using register addressing, x and y, are left alone, and the
+;                                          slightly slower method of updating the stack is used, outline below.
+;
+; Could get rid of the use of x and y as temporaries, by using sta $03,s in some places.
+; This would be slower (3 cycles more) and larger (1 byte)
+;...............................................................
+                macro
+&lab            pushptr &addr,&offset,&offset2
+&lab            anop
+                lclc    &C
+                lclc    &D
+                lclc    &R
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="#",.immediate
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+; ------------
+; Absolute addressing
+                aif     C:&offset=0,.nooffset
+; What kind of offset is it?
+&D       amid    &offset,1,1
+                aif     "&D"<>"#",.mem_offset
+; It's an immediate offset, strip off the hash
+&immoffset      setc    &offset
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+                aif     &immoffset=0,.nooffset
+                clc
+                lda     &addr
+                adc     #&immoffset
+                tay                    ; need to push the high word first, so save the low word
+                lda     &addr+2
+                adc     #^&immoffset       ; for immediate, we assume a full 32 bits, though this is usually always 0
+                pha
+                phy
+                mexit
+.mem_offset
+                clc
+                lda     &addr
+                adc     &offset
+                tay                     ; need to push the high word first, so save the low word
+                lda     &addr+2
+                adc     #0                  ; assuming the offset is just a word, so add 0 for the high word
+                pha
+                phy
+                mexit
+.nooffset
+                aif     "&C"="<",.noffset_zp
+                pushword  &addr+2
+                pushword  &addr
+                mexit
+.noffset_zp
+; zero page, so we can use pei
+                pei  &addr+2
+                pei  &addr
+                mexit
+.immediate
+&toffset        amid  &addr,2,L:&addr-1
+; Generate PEA opcodes with data.  This helps with immediate values, because PEA wants an address
+                dc    i1'$f4',i2'(&toffset)|-16'
+                dc    i1'$f4',i2'&toffset'
+                mexit
+; ------------
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&offset=0,.regnooffset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+&sizef          setc    '|'
+.regoffnohash
+                aif     C:&offset2=0,.regnooffset2
+&C              amid    &offset2,1,1
+                aif     "&C"="<",.regoffset2_memvalue
+                aif     "&C"="|",.regoffset2_memvalue
+                aif     "&C"=">",.regoffset2_memvalue
+                aif     "&C"="[",.regoffset2_memvalue
+; offset2 is an immediate value, strip any #
+&immoffset setc    &offset2
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.regimmoffset_no_hash
+&immoffset amid    &immoffset,2,L:&immoffset-1
+.regimmoffset_no_hash
+                clc
+                lda     &sizef&toffset,&R
+                adc     #&immoffset
+                pha
+                pha
+                lda     &sizef&toffset+2,&R
+                adc     #^&immoffset
+                sta     3,s
+                mexit
+.regoffset2_memvalue
+; offset2 is a memory value, assuming it is just a word!
+                clc
+                lda     &sizef&toffset,&R
+                adc     &offset2
+                pha
+                pha
+                lda     &sizef&toffset+2,&R
+                adc     #0
+                sta     3,s
+                mexit
+.regnooffset2
+                lda     &sizef&toffset+2,&R
+                pha
+                lda     &sizef&toffset,&R
+                pha
+                mexit
+.regnooffset
+                mnote 'pushptr - Register addressing needs offset',1
+                mexit
+; ------------
+; Indirect addressing
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &offset
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset amid    &toffset,2,L:&toffset-1
+.toffset_no_hash
+                aif     C:&offset2=0,.nooffset2
+&C              amid    &offset2,1,1
+                aif     "&C"="<",.offset2_memvalue
+                aif     "&C"="|",.offset2_memvalue
+                aif     "&C"=">",.offset2_memvalue
+                aif     "&C"="[",.offset2_memvalue
+; offset2 is an immediate value
+; Strip the # off any constant offset
+&immoffset setc    &offset2
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.immoffset_no_hash
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+.immoffset_no_hash
+                aif     &toffset=0,.offset2_imm_zero
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     #&immoffset
+                tax
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #(&immoffset)|-16
+                pha
+                phx
+                mexit
+.offset2_imm_zero
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                clc
+                lda     &addr
+                adc     #&immoffset
+                tax
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #^immoffset
+                pha
+                phx
+                mexit
+.offset2_memvalue
+; offset2 is a memory value.  Note, we assume the offset2 is just a word value!
+                aif     &toffset=0,.offset2_imm_zero_mem
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     &offset2
+                tax
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #0
+                pha
+                phx
+                mexit
+.offset2_imm_zero_mem
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                clc
+                lda     &addr
+                adc     &offset2
+                tax
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #0
+                pha
+                phx
+                mexit
+.nooffset2
+                aif     &toffset=0,.nooffset2_imm_zero
+                ldy     #&toffset+2
+                pushword &addr,y
+                ldy     #&toffset
+                pushword &addr,y
+                mexit
+.nooffset2_imm_zero
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one.
+                ldy     #&toffset+2
+                pushword &addr,y
+                pushword &addr
+                mend
+
+;............................................................
+;
+;    Push a local ptr/long/address (4 bytes) onto stack
+;    This is a special case, where we want to resolve an address of a zp
+;    location into a full address.  The high word pushed is always 0
+;
+;    pushlocalptr address/#const    - use the immediate value or read the address and add it to the DP register and push the resulting 4 byte address.
+;...............................................................
+                macro
+&lab            pushlocalptr &addr
+&lab            anop
+                pea $0000
+                tdc
+                clc
+                adc     &addr
+                pha
+                mend
+
+;............................................................
+;
+;    Push a local sptr/short address (2 bytes) onto stack
+;    This is a special case, where we want to resolve an address of a zp
+;    location into a short pointer
+;
+;    pushlocalsptr address/#const    - use the immediate value or read the address and add it to the DP register and push the resulting 2 byte address.
+;...............................................................
+                macro
+&lab            pushlocalsptr &addr
+&lab            anop
+                tdc
+                clc
+                adc     &addr
+                pha
+                mend
+
+;............................................................
+; Push a the high-word of an address to the stack
+; This is mainly for pushing a labels bank address to the stack
+;
+; pushptrhigh #label
+;...............................................................
+                macro
+&lab            pushptrhigh &addr
+&lab            anop
+                lclc    &C
+                lclc    &saddr
+&C              amid    &addr,1,1
+                aif     "&C"="#",.is_label
+                mnote 'pushptrhigh - Unsupported addressing mode',1
+                mexit
+.is_label
+&saddr          amid    &addr,2,L:&addr-1
+                pea &saddr|-16
+                mend
+
+;............................................................
+; Alias getdword to getptr
+                macro
+&lab            getdword &addr,&param2,&param3,&param4
+
+&lab            anop
+                aif     C:&param2=0,.noparam2
+                aif     C:&param3=0,.noparam3
+                aif     C:&param4=0,.noparam4
+
+                getptr &addr,&param2,&param3,&param4
+                mexit
+.noparam4
+                getptr &addr,&param2,&param3
+                mexit
+.noparam3
+                getptr &addr,&param2
+                mexit
+.noparam2
+                getptr &addr
+
+                mend
+
+;............................................................
+;
+;   Get a pointer and put it into another address
+;
+;    getptr address,address             - get an address and put it in the destination address
+;    getptr address,offset,address      - get an address, add an offset to it, and put it in the destination address
+;    getptr #address/const, address     - get a constant address and put it in the destination address
+;    getptr [DP],offset,address,offset2   - get an indirect address, with an offset that is put in y, and used for [zp],y, offset2 is added, if there.
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;    getptr {r},offset,address,offset2   - register offset addressing.
+;                                          offset2 can be an immediate value (no # in front), or a memory address, use the memory addressing markers, <, >, |, or [
+;
+;    This macro strives to always have the high word of the pointer in the ACC at the end,
+;    so that the status register will have Z set if it is 0 and the user can do a beq/bne right
+;    afterward.  It is fairly safe to assume a pointer is null, if it high word is null,
+;    however, be aware of that functions can end up passing 'stack/DP' pointers,
+;    and the high word would be 0.
+;
+;    This macro also assuming, that when using the offset2 value, that it should add the high word
+;    This is almost always un-necessary, at least in most practical cases, because it is rare to
+;    using structures that cross bank bounaries.  At least the way I code things.
+;...............................................................
+                macro
+&lab            getptr &addr,&param2,&param3,&param4
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &immval
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+&C              amid    &addr,1,1
+                aif     "&C"="#",.immediate
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+; ------------
+; Absolute addressing
+                aif     C:&param2=0,.noparam2
+                aif     C:&param3=0,.noparam3
+; We have a param3, so that is the destination, and param2 is an offset to be added
+&C              amid    &param2,1,1
+                aif     "&C"<>"#",.param2_no_hash
+&immoffset      setc    &param2
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+; param2 is an immediate value
+                clc
+                lda     &addr
+                adc     #&immoffset
+                sta     &param3
+                lda     &addr+2
+                adc     #^&immoffset                     ; using the full 32 bits of the offset, though this is usually 0
+                sta     &param3+2
+                mexit
+.param2_no_hash
+; param2 is not an immediate value, use as an address, though we are assuming it is just a word value
+                clc
+                lda     &addr
+                adc     &param2
+                sta     &param3
+                lda     &addr+2
+                adc     #0
+                sta     &param3+2
+                mexit
+.noparam3
+                lda     &addr
+                sta     &param2
+                lda     &addr+2
+                sta     &param2+2
+                mexit
+.noparam2
+                mnote 'Missing the second parameter',1
+                mexit
+; ------------
+; Immediate addressing.  Assuming there are no other
+; parameters, as you can just add offsets to the immediate value
+.immediate
+&immval         amid    &addr,2,L:&addr-1
+                lda     #&immval
+                sta     &param2
+                lda     #^&immval
+                sta     &param2+2
+                mexit
+; ------------
+; Register based addressing
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&param2=0,.regnooffset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                aif     C:&param4=0,.regnoparam4
+&C              amid    &param4,1,1
+                aif     "&C"="<",.regparam4_memvalue
+                aif     "&C"="|",.regparam4_memvalue
+                aif     "&C"=">",.regparam4_memvalue
+                aif     "&C"="[",.regparam4_memvalue
+; param4 is an immediate value, strip any #
+&immoffset      setc    &param4
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.regimmoffset_no_hash
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+.regimmoffset_no_hash
+                clc
+                lda     &sizef&toffset,&R
+                adc     #&immoffset
+                sta     &param3
+                lda     &sizef&toffset+2,&R
+                adc     #^&immoffset
+                sta     &param3+2
+                mexit
+.regparam4_memvalue
+; param4 is a memory value, assuming it is just a word!
+                clc
+                lda     &sizef&toffset,&R
+                adc     &param4
+                sta     &param3
+                lda     &sizef&toffset+2,&R
+                adc     #0
+                sta     &param3+2
+                mexit
+.regnoparam4
+                lda     &sizef&toffset,&R
+                sta     &param3
+                lda     &sizef&toffset+2,&R
+                sta     &param3+2
+                mexit
+.regnooffset
+                mnote 'getptr - Register addressing needs offset',1
+                mexit
+; ------------
+; Indirect addresing
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_no_hash
+&toffset        amid    &toffset,2,L:&toffset-1
+.toffset_no_hash
+                aif     C:&param4=0,.noparam4
+&C              amid    &param4,1,1
+                aif     "&C"="<",.param4_memvalue
+                aif     "&C"="|",.param4_memvalue
+                aif     "&C"=">",.param4_memvalue
+                aif     "&C"="[",.param4_memvalue
+; param4 is an immediate value, strip any #
+&immoffset      setc    &param4
+&C              amid    &immoffset,1,1
+                aif     "&C"<>"#",.immoffset_no_hash
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+.immoffset_no_hash
+                aif     &toffset=0,.param4_zero_toffset_1
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     #&immoffset
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #^&immoffset
+                sta     &param3+2
+                mexit
+.param4_zero_toffset_1
+; toffset is 0, so skip loading and using y for the low word
+                clc
+                lda     &addr
+                adc     #&immoffset
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #^&immoffset
+                sta     &param3+2
+                mexit
+.param4_memvalue
+; param4 is a memory value.  Note, we assume the param4 is just a word value!
+                aif     &toffset=0,.param4_zero_toffset_2
+                clc
+                ldy     #&toffset
+                lda     &addr,y
+                adc     &param4
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #0
+                sta     &param3+2
+                mexit
+.param4_zero_toffset_2
+; toffset is 0, so skip loading and using y for the low word
+                clc
+                lda     &addr
+                adc     &param4
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                adc     #0
+                sta     &param3+2
+                mexit
+.noparam4
+                aif     &toffset=0,.noparam4_zero_immoffset
+                ldy     #&toffset
+                lda     &addr,y
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                sta     &param3+2
+                mexit
+.noparam4_zero_immoffset
+; The immediate offset is 0, we can skip loading y and addressing with y for the first one
+                lda     &addr
+                sta     &param3
+                ldy     #&toffset+2
+                lda     &addr,y
+                sta     &param3+2
+                mend
+
+;............................................................
+;
+;   getword
+;
+;    getword address                    - get a word at the address and leave it in a
+;    getword address/#const,address     - get word from an address and put it into another address
+;    getword #const, address            - get a constant word and put it in the destination address
+;    getword [DP],offset,address  - get an indirect word, with an offset that is put in y, and used for [zp],y
+;    getword {r},offset,address         - get a word, using register addressing, relative to the current bank
+;
+; For the indirect addressing, the immediate offset supports the keyword #same, which
+; means that it will use the last y register value used in a previous getword putword macro
+; Be careful with this.  It is in macro expansion order, not execution order!
+;...............................................................
+                macro
+&lab            getword &addr,&param2,&param3
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &immval
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+                lclb    &issameoffset
+; track the last offset we use for the y register
+                aif     C:&glastyoffset>0,.past
+                gblc    &glastyoffset
+.past
+&C              amid    &addr,1,1
+                aif     C:&param2=0,.noparam2
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                lda     &addr
+                sta     &param2
+                mexit
+.noparam2
+                lda     &addr
+                mexit
+
+;;;; Register based addressing
+
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&param2=0,.regnooffset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                lda     &sizef&toffset,&R
+                aif     C:&param3=0,.noregparam3
+                sta     &param3
+.noregparam3
+                mexit
+.regnooffset
+                mnote   'getword - Register addressing needs offset',1
+                mexit
+
+; Indirect addresing
+
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_not_immediate
+
+; Offset is immediate
+
+&toffset        amid    &toffset,2,L:&toffset-1
+
+; Are we trying to use the 'same' offset from last time?
+
+                aif     "&toffset"<>"same",.toffset_not_same
+&toffset        setc    &glastyoffset
+&issameoffset   setb 1
+                ago     .toffset_is_same
+
+.toffset_not_same
+&glastyoffset   setc    &toffset
+
+.toffset_is_same
+                aif     &toffset<>0,.toffset_not_0
+
+; Offset is 0, so we can just use non-indexed addressing
+                aif     C:&param3=0,.toffset_0_no_param3
+                lda     &addr
+                sta     &param3
+                mexit
+
+.toffset_0_no_param3
+                lda     &addr
+                mexit
+
+.toffset_not_0
+                aif     C:&param3=0,.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                lda     &addr,y
+                sta     &param3
+                mexit
+
+.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                lda     &addr,y
+                mexit
+
+; Offset is not immediate
+
+.toffset_not_immediate
+                aif     C:&param3=0,.nozpparam3
+                ldy     &toffset
+                lda     &addr,y
+                sta     &param3
+                mexit
+.nozpparam3
+                ldy     &toffset
+                lda     &addr,y
+                mend
+
+;............................................................
+;
+;   adcword
+;
+;    adcword address                    - add a word at the address
+;    adcword [DP],offset          - add an indirect word, with an offset that is put in y, and used for [zp],y
+;    adcword {r},offset                 - add a word, using register addressing, relative to the current bank
+;
+; This macro does NOT clear the carry.
+;
+; For the indirect addressing, the immediate offset supports the keyword #same, which
+; means that it will use the last y register value used in a previous adcword getword putword macro
+; Be careful with this.  It is in macro expansion order, not execution order!
+;...............................................................
+                macro
+&lab            adcword &addr,&param2,&param3
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &immval
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+                lclb    &issameoffset
+; track the last offset we use for the y register
+                aif     C:&glastyoffset>0,.past
+                gblc    &glastyoffset
+.past
+&C              amid    &addr,1,1
+                aif     C:&param2=0,.noparam2
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                adc     &addr
+                sta     &param2
+                mexit
+.noparam2
+                adc     &addr
+                mexit
+
+;;;; Register based addressing
+
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&param2=0,.regnooffset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                adc     &sizef&toffset,&R
+                aif     C:&param3=0,.noregparam3
+                sta     &param3
+.noregparam3
+                mexit
+.regnooffset
+                mnote   'adcword - Register addressing needs offset',1
+                mexit
+
+; Indirect addresing
+
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_not_immediate
+
+; Offset is immediate
+
+&toffset        amid    &toffset,2,L:&toffset-1
+
+; Are we trying to use the 'same' offset from last time?
+
+                aif     "&toffset"<>"same",.toffset_not_same
+&toffset        setc    &glastyoffset
+&issameoffset   setb    1
+                ago     .toffset_is_same
+
+.toffset_not_same
+&glastyoffset   setc    &toffset
+
+.toffset_is_same
+                aif     &toffset<>0,.toffset_not_0
+
+; Offset is 0, so we can just use non-indexed addressing
+                aif     C:&param3=0,.toffset_0_no_param3
+                adc     &addr
+                sta     &param3
+                mexit
+
+.toffset_0_no_param3
+                adc     &addr
+                mexit
+
+.toffset_not_0
+                aif     C:&param3=0,.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                adc     &addr,y
+                sta     &param3
+                mexit
+
+.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                adc     &addr,y
+                mexit
+
+; Offset is not immediate
+
+.toffset_not_immediate
+                aif     C:&param3=0,.nozpparam3
+                ldy     &toffset
+                adc     &addr,y
+                sta     &param3
+                mexit
+.nozpparam3
+                ldy     &toffset
+                adc     &addr,y
+                mend
+
+;............................................................
+;
+;   sbcword
+;
+;    sbcword address                    - subtract a word at the address
+;    sbcword [DP],offset          - subtract an indirect word, with an offset that is put in y, and used for [zp],y
+;    sbcword {r},offset                 - subtract a word, using register addressing, relative to the current bank
+;
+; This macro does NOT clear the carry.
+;
+; For the indirect addressing, the immediate offset supports the keyword #same, which
+; means that it will use the last y register value used in a previous adcword getword putword macro
+; Be careful with this.  It is in macro expansion order, not execution order!
+;...............................................................
+                macro
+&lab            sbcword &addr,&param2,&param3
+&lab            anop
+                lclc    &C
+                lclc    &R
+                lclc    &immval
+                lclc    &immoffset
+                lclc    &toffset
+                lclc    &sizef
+                lclb    &issameoffset
+; track the last offset we use for the y register
+                aif     C:&glastyoffset>0,.past
+                gblc    &glastyoffset
+.past
+&C              amid    &addr,1,1
+                aif     C:&param2=0,.noparam2
+                aif     "&C"="[",.indirect
+                aif     "&C"="{",.regaddr
+                sbc     &addr
+                sta     &param2
+                mexit
+.noparam2
+                sbc     &addr
+                mexit
+
+;;;; Register based addressing
+
+.regaddr
+&R              amid    &addr,2,1
+                aif     C:&param2=0,.regnooffset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.regoffnohash
+&toffset        amid    &toffset,2,L:&toffset-1
+                aif     "&R"="s",.iss
+                aif     "&R"<>"S",.nots
+.iss
+&sizef          setc    '<'
+                ago     .regoffnohash
+.nots
+&sizef          setc    '|'
+.regoffnohash
+                sbc     &sizef&toffset,&R
+                aif     C:&param3=0,.noregparam3
+                sta     &param3
+.noregparam3
+                mexit
+.regnooffset
+                mnote   'sbcword - Register addressing needs offset',1
+                mexit
+
+; Indirect addresing
+
+.indirect
+; Strip the # off any constant offset
+&toffset        setc    &param2
+&C              amid    &toffset,1,1
+                aif     "&C"<>"#",.toffset_not_immediate
+
+; Offset is immediate
+
+&toffset        amid    &toffset,2,L:&toffset-1
+
+; Are we trying to use the 'same' offset from last time?
+
+                aif     "&toffset"<>"same",.toffset_not_same
+&toffset        setc    &glastyoffset
+&issameoffset   setb 1
+                ago     .toffset_is_same
+
+.toffset_not_same
+&glastyoffset   setc    &toffset
+
+.toffset_is_same
+                aif     &toffset<>0,.toffset_not_0
+
+; Offset is 0, so we can just use non-indexed addressing
+                aif     C:&param3=0,.toffset_0_no_param3
+                sbc     &addr
+                sta     &param3
+                mexit
+
+.toffset_0_no_param3
+                sbc     &addr
+                mexit
+
+.toffset_not_0
+                aif     C:&param3=0,.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                sbc     &addr,y
+                sta     &param3
+                mexit
+
+.toffset_not_0_no_param3
+                aif     &issameoffset=1,.skip
+                ldy     #&toffset
+.skip
+                sbc     &addr,y
+                mexit
+
+; Offset is not immediate
+
+.toffset_not_immediate
+                aif     C:&param3=0,.nozpparam3
+                ldy     &toffset
+                sbc     &addr,y
+                sta     &param3
+                mexit
+.nozpparam3
+                ldy     &toffset
+                sbc     &addr,y
+                mend
+
+;...............................................................
+; Return from a subroutine (long)
+; This macro is for returning from a ssub.
+; See that definition for more information
+; Overall this works exactly like ret, except the restoring
+; of the DP is removed.
+; This does also have the extension for the 2 and 4 byte
+; return values, where the return value can be A or AX.
+; This simply assumes that the return value is already in
+; A or A and X, and doesn't try and re-load those, however
+; it does still use Y as a temporary.
+; The carry flag will always be clear on exit
+;
+                macro
+&l              sret &r
+&l              anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r              setc    0
+&len            setc    0
+                ago     .h
+.a
+&len            amid    &r,2,1
+                aif     "&len"=":",.b
+&len            amid    &r,1,2
+&r              amid    &r,4,l:&r-3
+                ago     .c
+.b
+&len            amid    &r,1,1
+&r              amid    &r,3,l:&r-2
+.c
+                aif     &len<>2,.d
+                aif     "&r"<>"A",.c1
+; The return value is in A, put it in Y, for later
+                tay
+                ago     .h
+.c1
+                ldy     &r
+                ago     .h
+.d
+                aif     &len<>4,.e
+                aif     "&r"<>"AX",.d1
+; The return value is in A and X, put A it in Y, for later
+                tay
+                ago     .h
+.d1
+                ldx     &r+2
+                ldy     &r
+                ago     .h
+.e
+                aif     &len<>10,.g
+                ldy     #&r
+                ldx     #^&r
+                ago     .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif     &totallen=0,.i
+                lda     &worklen+2,s
+                sta     &worklen+&totallen+2,s
+                lda     &worklen+1,s
+                sta     &worklen+&totallen+1,s
+.i
+                tsc
+                clc
+                adc     #&worklen+&totallen
+                tcs
+                aif     &len=0,.j
+                tya
+.j
+                rtl
+                mend
+
+;...............................................................
+; Return from a subroutine (long)
+; This macro is for returning from a ssub.
+; Same as sret, except it will keep the state of the carry
+;
+                macro
+&l              sretkc &r
+&l              anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r              setc    0
+&len            setc    0
+                ago     .h
+.a
+&len            amid    &r,2,1
+                aif     "&len"=":",.b
+&len            amid    &r,1,2
+&r              amid    &r,4,l:&r-3
+                ago     .c
+.b
+&len            amid    &r,1,1
+&r              amid    &r,3,l:&r-2
+.c
+                aif     &len<>2,.d
+                aif     "&r"<>"A",.c1
+; The return value is in A, put it in Y, for later
+                tay
+                ago     .h
+.c1
+                aif     "&r"<>"Y",.c2
+; The return value is already in Y
+                ago     .h
+.c2
+                ldy     &r
+                ago     .h
+.d
+                aif     &len<>4,.e
+                aif     "&r"<>"AX",.d1
+; The return value is in A and X, put A it in Y, for later
+                tay
+                ago     .h
+.d1
+                ldx     &r+2
+                ldy     &r
+                ago     .h
+.e
+                aif     &len<>10,.g
+                ldy     #&r
+                ldx     #^&r
+                ago     .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif     &totallen=0,.i
+                lda     &worklen+2,s
+                sta     &worklen+&totallen+2,s
+                lda     &worklen+1,s
+                sta     &worklen+&totallen+1,s
+.i
+                tsc
+; We want to preserve the state of the carry, so branch if it is set.
+                bcs    ~a&SYSCNT
+; Not set, add our offset
+                adc     #&worklen+&totallen
+                tcs
+                aif     &len=0,.j1
+                tya
+.j1
+                rtl
+~a&SYSCNT anop
+; We come here if the carry was set.  Save another byte and get rid of the clc and subtract one from the calculation
+                adc     #&worklen+&totallen-1
+                tcs
+                aif     &len=0,.j2
+                tya
+.j2
+; Restore the carry to set
+                sec
+                rtl
+                mend
+
+;...............................................................
+; Return from a subroutine (long)
+; This macro is for returning from a ssub.
+; Same as sret, except the carry will be set on exit.
+; Note, sret will always have the carry clear on exit
+;
+                macro
+&l              sretcs &r
+&l              anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r              setc    0
+&len            setc    0
+                ago     .h
+.a
+&len            amid    &r,2,1
+                aif     "&len"=":",.b
+&len            amid    &r,1,2
+&r              amid    &r,4,l:&r-3
+                ago     .c
+.b
+&len            amid    &r,1,1
+&r              amid    &r,3,l:&r-2
+.c
+                aif     &len<>2,.d
+                aif     "&r"<>"A",.c1
+; The return value is in A, put it in Y, for later
+                tay
+                ago     .h
+.c1
+                ldy     &r
+                ago     .h
+.d
+                aif     &len<>4,.e
+                aif     "&r"<>"AX",.d1
+; The return value is in A and X, put A it in Y, for later
+                tay
+                ago     .h
+.d1
+                ldx     &r+2
+                ldy     &r
+                ago     .h
+.e
+                aif     &len<>10,.g
+                ldy     #&r
+                ldx     #^&r
+                ago     .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif     &totallen=0,.i
+                lda     &worklen+2,s
+                sta     &worklen+&totallen+2,s
+                lda     &worklen+1,s
+                sta     &worklen+&totallen+1,s
+.i
+                tsc
+                clc
+                adc     #&worklen+&totallen
+                tcs
+                aif     &len=0,.j
+                tya
+.j
+                sec
+                rtl
+                mend
+
+;...............................................................
+; Subroutine (long call)
+; This version is similar to sub, except it does not change
+; the DP.
+; You can still pass in values as usual, and still define local
+; storage, however the defined values are used as stack offsets
+; and accessed through the opcodes that use the stack, such as
+; lda offset,s
+; This does need some care in remembering that if the function
+; pushes anything on the stack, that additional stack usage has to
+; be added to the offsets.
+;
+; If there is no local storage, this macro generates no code
+                macro
+&l              ssub    &parms,&work
+&l              anop
+                aif     c:&work,.a
+                lclc    &work
+&work           setc    0
+.a
+                gbla    &totallen
+                gbla    &worklen
+&worklen        seta    &work
+&totallen       seta    0
+                aif     c:&parms=0,.e
+                lclc    &len
+                lclc    &p
+                lcla    &i
+&i              seta    c:&parms
+.b
+&p              setc    &parms(&i)
+&len            amid    &p,2,1
+                aif     "&len"=":",.c
+&len            amid    &p,1,2
+&p              amid    &p,4,l:&p-3
+                ago     .d
+.c
+&len            amid    &p,1,1
+&p              amid    &p,3,l:&p-2
+.d
+&p              equ     &totallen+4+&work
+&totallen       seta    &totallen+&len
+&i              seta    &i-1
+                aif     &i,^b
+.e
+                aif     &work=0,.f
+                tsc
+                sec
+                sbc     #&work
+                tcs
+.f
+                mend
+
+;...............................................................
+; retkc (ret keep carry)
+;
+; This is a modified version of ret, that will preserve the carry flag.
+; It is a bit clunky in that it uses a branch, however
+; this doesn't need to use the stack, i.e. PHP, PLP, which
+; is a bit problematic, because we are futzing with the stack
+; postion in the macro itself.
+;
+; To keep the branch count at 1, we duplicate some last bits of
+; the stack fixup and return code, meaning added code-size. An extra 7 or 8
+; bytes, depending on the return size and the addition of 2 bytes for
+; for the branch, but we offset that by saving 1 byte by skipping the clc
+; because we know the carry is clear.  This also means the carry-clear
+; path, which is the no-error path, is the same cycle count as the regular
+; ret, as the failed branch is 2 cycles and is offset by the lack
+; of a clc, which is also 2 cycles. We assume the carry will still be
+; clear after adding to the stack, because if it did cause a carry,
+; it would mean the stack wrapped, and we would have more to worry about
+; than the incorrect state of the carry flag.
+                macro
+&l              retkc   &r
+&l              anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r              setc    0
+&len            setc    0
+                ago     .h
+.a
+&len            amid    &r,2,1
+                aif     "&len"=":",.b
+&len            amid    &r,1,2
+&r              amid    &r,4,l:&r-3
+                ago     .c
+.b
+&len            amid    &r,1,1
+&r              amid    &r,3,l:&r-2
+.c
+                aif     &len<>2,.d
+                aif     "&r"<>"A",.c1
+; The return value is in A, put it in Y, for later
+                tay
+                ago     .h
+.c1
+                aif     "&r"<>"Y",.c2
+; The return value is already in Y
+                ago     .h
+.c2
+                ldy     &r
+                ago     .h
+.d
+                aif     &len<>4,.e
+                aif     "&r"<>"AX",.d1
+; The return value is in A and X, put A it in Y, for later
+                tay
+                ago     .h
+.d1
+                ldx     &r+2
+                ldy     &r
+                ago     .h
+.e
+                aif     &len<>10,.g
+                ldy     #&r
+                ldx     #^&r
+                ago     .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif     &totallen=0,.i
+                lda     &worklen+2
+                sta     &worklen+&totallen+2
+                lda     &worklen+1
+                sta     &worklen+&totallen+1
+.i
+                pld
+                tsc
+; We want to preserve the state of the carry, so branch if it is set.
+                bcs    ~a&SYSCNT
+; Not set, add our offset
+                adc     #&worklen+&totallen
+                tcs
+; Assuming that we don't need to do a clc, as the add should never overflow.
+                aif     &len=0,.j1
+                tya
+.j1
+                rtl
+~a&SYSCNT anop
+; We come here if the carry was set.  Save another byte and get rid of the clc and subtract one from the calculation
+                adc     #&worklen+&totallen-1
+                tcs
+                aif     &len=0,.j2
+                tya
+.j2
+; Restore the carry to set
+                sec
+                rtl
+                mend
+
+;...............................................................
+; lretkc (ret keep carry)
+;
+; Same as retkc, but for 'local' subroutines.
+; See retkc for more info
+                macro
+&l              lretkc  &r
+&l              anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r              setc    0
+&len            setc    0
+                ago     .h
+.a
+&len            amid    &r,2,1
+                aif     "&len"=":",.b
+&len            amid    &r,1,2
+&r              amid    &r,4,l:&r-3
+                ago     .c
+.b
+&len            amid    &r,1,1
+&r              amid    &r,3,l:&r-2
+.c
+                aif     &len<>2,.d
+                aif     "&r"<>"A",.c1
+; The return value is in A, put it in Y, for later
+                tay
+                ago     .h
+.c1
+                aif     "&r"<>"Y",.c2
+; The return value is already in Y
+                ago     .h
+.c2
+                ldy     &r
+                ago     .h
+.d
+                aif     &len<>4,.e
+                aif     "&r"<>"AX",.d1
+; The return value is in A and X, put A it in Y, for later
+                tay
+                ago     .h
+.d1
+                ldx     &r+2
+                ldy     &r
+                ago     .h
+.e
+                aif     &len<>10,.g
+                ldy     #&r
+                ldx     #^&r
+                ago     .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif     &totallen=0,.i
+                lda     &worklen+1
+                sta     &worklen+&totallen+1
+.i
+                pld
+                tsc
+; We want to preserve the state of the carry, so branch if it is set.
+                bcs    ~a&SYSCNT
+; Not set, add our offset
+                adc     #&worklen+&totallen
+                tcs
+; Assuming that we don't need to do a clc, as the add should never overflow.
+                aif     &len=0,.j1
+                tya
+.j1
+                rts
+~a&SYSCNT       anop
+; We come here if the carry was set.  Save another byte and get rid of the clc and subtract one from the calculation
+                adc     #&worklen+&totallen-1
+                tcs
+                aif     &len=0,.j2
+                tya
+.j2
+; Restore the carry to set
+                sec
+                rts
+                mend
+;...............................................................
+; Same as the ret macro, except it will make sure the carry is set on exit
+; The original ret macro will always have carry clear, as a result
+; of its addition for the stack adjustment, which will never overflow
+                macro
+&l	            retcs   &r
+&l	            anop
+                lclc    &len
+                aif     c:&r,.a
+                lclc    &r
+&r	            setc    0
+&len	        setc    0
+                ago .h
+.a
+&len	        amid    &r,2,1
+                aif     "&len"=":",.b
+&len	        amid    &r,1,2
+&r	            amid    &r,4,l:&r-3
+                ago .c
+.b
+&len	        amid    &r,1,1
+&r	            amid    &r,3,l:&r-2
+.c
+                aif &len<>2,.d
+                ldy &r
+                ago .h
+.d
+                aif &len<>4,.e
+                ldx &r+2
+                ldy &r
+                ago .h
+.e
+                aif &len<>10,.g
+                ldy #&r
+                ldx #^&r
+                ago .h
+.g
+                mnote 'Not a valid return length',16
+                mexit
+.h
+                aif &totallen=0,.i
+                lda &worklen+2
+                sta &worklen+&totallen+2
+                lda &worklen+1
+                sta &worklen+&totallen+1
+.i
+                pld
+                tsc
+                clc
+                adc #&worklen+&totallen
+                tcs
+                aif &len=0,.j
+                tya
+.j
+                sec
+                rtl
+                mend
+;...............................................................
+; popstack offset
+; Add an amount to the stack, essentailly popping that amount
+                macro
+&lab            popstack &offset
+                tsc
+                clc
+                adc &offset
+                tcs
+                mend
+
+;...............................................................
+; pushstack offset
+; subtract an amount from the stack, essentailly pushing that amount
+; though what is on the stack in those spots will be arbibrary
+                macro
+&lab            pushstack &offset
+                tsc
+                sec
+                sbc &offset
+                tcs
+                mend
+
+;...............................................................
+; ifnullretptr
+;
+; Test a pointer returned from a sub and branch if it is null
+; Kinda covers up a little ugliness.  Does destroy what is in Y
+; Must be done right after returning from the sub
+;
+                macro
+&lab            ifnullretptr &branchto
+&lab            anop
+                bne     ~a&SYSCNT
+                txy
+                beq     &branchto
+~a&SYSCNT       anop
+                mend
+;...............................................................
+; setdp
+;
+; Push the dp register and set it to the value in addr
+; Note, this will load A will addr
+;
+                macro
+&lab            setdp &addr
+&lab            anop
+
+                phd
+                lda     &addr
+                tcd
+                mend
+
+;...............................................................
+; restoredp
+;
+; Pop the saved direct page register
+; A simple macro, but it helps with readability
+;
+                macro
+&lab            restoredp
+&lab            anop
+                pld
+                mend
+;...............................................................
+; setlocaldatabank
+;
+; Push the data bank register and set it to the current K bank
+; A simple macro, but it helps with readability
+; This DOES save the current databank register on the stack
+;
+                macro
+&lab            setlocaldatabank
+&lab            anop
+                phb
+                phk
+                plb
+                mend
+;...............................................................
+; setdatabanktoptr
+;
+; Push the data bank register and set it to the third byte in
+; a 4 byte pointer
+; If the input is a DP value, this is 17-18 cycles (usually 18, because of DP alignment)
+; If the input is not, this is 20 or 21, depending on whether the address is short or long.
+; This DOES save the current databank register on the stack
+;
+                macro
+&lab            setdatabanktoptr &addr
+&lab            anop
+                lclc    &C
+&C              amid    &addr,1,1
+                phb                         ; 3
+                aif     "&C"="<",.indirect
+; load with the accumulator, then push, switching in and out of 8 bit mode.  This is the same number of cycles
+; as doing the trick load from + 1, then pushing 16-bits, then pulling twice.
+                sep     #%00100000          ; 3
+                longa   off
+                lda     &addr+2             ; 4-5 (or 3-4 for zp)
+                pha                         ; 3
+                rep     #%00100000          ; 3
+                longa   on
+                plb                         ; 4
+                mexit
+.indirect
+; We can use PEI for a quicker push, but have to use a bit of a trick to get the correct bank
+                pei     &addr+1             ; 6-7
+                plb                         ; 4
+                plb                         ; 4
+                mend
+
+;...............................................................
+; setdatabanktoa
+; Set the databank to the value that is in a
+; This DOES save the current databank register on the stack
+                macro
+&lab            setdatabanktoreg &reg
+&lab            anop
+                phb
+                aif     "&reg"="a",.acc
+                aif     "&reg"="x",.x
+                aif     "&reg"="y",.y
+                mnote "setdatabanktoreg - unknown register",1
+                mexit
+.acc
+                sep     #%00100000
+                longa   off
+                pha
+                rep     #%00100000
+                longa   on
+                plb
+                mexit
+
+.x
+                sep     #%00010000
+                longi   off
+                phx
+                rep     #%00010000
+                longi   on
+                plb
+                mexit
+
+.y
+                sep     #%00010000
+                longi   off
+                phy
+                rep     #%00010000
+                longi   on
+                plb
+                mend
+
+;...............................................................
+; setdatabanktolabel
+;
+; Set the databank to the address of a label
+; This DOES save the current databank register on the stack
+; 16 cycles
+                macro
+&lab            setdatabanktolabel &banklab
+&lab            anop
+
+; This is two cycles faster than changing to short m and loading and pushing.
+                phb                             ; 3
+; Set get the bank address into the high byte of the pea, so that it will be the last to be pulled
+                pea &banklab|-8                 ; 5
+                plb                             ; 4
+                plb                             ; 4
+                mend
+
+;...............................................................
+; restoredatabank
+;
+; Pop the saved local data bank
+; A simple macro, but it helps with readability
+;
+                macro
+&lab            restoredatabank
+&lab            anop
+                plb
+                mend
+
+;...............................................................
+; setregtoptr
+;
+; Set the input register, either x or y, to an address
+; This macro is used, simply as a way to visually (and searchably)
+; signal, what is being done.  The result of the macro
+; is simply ldy     &addr or ldx &addr
+;
+; This does support an optional offset, in which case A is used
+; to load the short address, adjust the pointer, then transfer to
+; the desired register.  Note that if the offset is immediate and
+; resolved to 0, then the register is loaded directly and no
+; add is done.  Please note that for this to work, the
+; immediate value must be a gequ or local equ or fixed number.
+;
+; Note that this is only the 'short' address, since we only have 16 bits
+; Use this in conjunction with the setdatabanktoptr macro
+;
+                macro
+&lab            setregtoptr &reg,&addr,&offset
+&lab            anop
+                lclc    &C
+                lclc    &immoffset
+
+                aif     C:&offset=0,.nooffset
+&C              amid    &offset,1,1
+                aif     "&C"<>"#",.mem_offset
+; It's an immediate offset, strip off the hash
+&immoffset      setc    &offset
+&immoffset      amid    &immoffset,2,L:&immoffset-1
+                aif     &immoffset=0,.nooffset
+                clc
+                lda     &addr
+                adc     #&immoffset
+                aif     "&reg"="y",.offset_yreg
+                aif     "&reg"="x",.offset_xreg
+                mnote "setregtoptr - unknown register",1
+                mexit
+.mem_offset
+                clc
+                lda     &addr
+                adc     &offset
+
+                aif     "&reg"="y",.offset_yreg
+                aif     "&reg"="x",.offset_xreg
+                mnote "setregtoptr - unknown register",1
+                mexit
+.offset_yreg
+                tay
+                mexit
+.offset_xreg
+                tax
+                mexit
+
+.nooffset
+                aif     "&reg"="y",.yreg
+                aif     "&reg"="x",.xreg
+                mnote "setregtoptr - unknown register",1
+                mexit
+.yreg
+                ldy     &addr
+                mexit
+.xreg
+                ldx     &addr
+                mend
+
+;...............................................................
+; Arithmetic shift of the ACC, to the right.
+; Note that this version assumes it needs to test the upper bit
+; for negative.  Use the asr_nt, if the N conditional flag is
+; already set to what is in the ACC.
+; asr count
+
+                macro
+&lab            asr &count
+&lab            anop
+                aif     &count=0,.is_0
+                aif     &count=0,.is_1
+                aif     &count=8,.is_8
+                aif     &count<8,.less_8
+                mnote "asr only suports 0-8",1
+                mexit
+.is_8
+; 8, quicker with an xba, 11, positive, 13 negative
+                xba
+                and     #$00ff
+                bit     #$0080
+                beq     ~a&SYSCNT
+                ora     #$ff00
+~a&SYSCNT anop
+
+                mexit
+.is_1
+; 1, not much quicker than > 1, but smaller code, so better, right?
+; 10 negative, 10 positive
+                bit     #$8000
+                bmi     ~c&SYSCNT
+                lsr	a
+                bra     ~d&SYSCNT
+~c&SYSCNT       anop
+                sec
+                ror     a
+~d&SYSCNT       anop
+                mexit
+.less_8
+; 9 + (2*shift), negative, 8 + (2*shift), positive
+                bit     #$8000
+                bmi     ~a&SYSCNT
+                shiftright &count
+                bra     ~b&SYSCNT
+~a&SYSCNT       anop
+                shiftright &count
+                ora     #(1|(16-&count))*-1
+~b&SYSCNT       anop
+.is_0
+                mend
+
+;...............................................................
+; Arithmetic shift of the ACC, to the right.
+; Note that this version assumes that the N conditional flag is
+; already set to what is in the ACC.
+; asr_nt count
+
+                macro
+&lab            asr_nt &count
+&lab            anop
+                aif     &count=0,.is_0
+                aif     &count=0,.is_1
+                aif     &count=8,.is_8
+                aif     &count<8,.less_8
+                mnote "asr_nt only suports 0-8",1
+                mexit
+.is_8
+; 8, is quicker with an xba
+; 8 negative, 10 postive
+                bmi     ~a&SYSCNT
+                xba
+                and     #$00ff
+                bra     ~b&SYSCNT
+~a&SYSCNT anop
+                xba
+                ora     #$ff00
+~b&SYSCNT anop
+                mexit
+.is_1
+; 1, same as > 1, but smaller
+; by setting the carry correctly, then doing a rol
+; 7, postive, 8 negative
+                clc
+                bpl     ~c&SYSCNT
+                sec
+~c&SYSCNT anop
+                ror     a
+                mexit
+.less_8
+; 6 + (2*shift), negative, 5 + (2*shift), positive
+                bmi     ~a&SYSCNT
+                shiftright &count
+                bra     ~b&SYSCNT
+~a&SYSCNT       anop
+                shiftright &count
+                ora     #(1|(16-&count))*-1
+~b&SYSCNT       anop
+.is_0
+                mend
+
+;...............................................................
+; Do a fp16 multiply, with the two values in ACC and X
+; The result will be in A
+; This, unfortunately, needs temporary memory at the end
+; to get the result back to fp16
+; One can be supplied as the first parameter or, if
+; that is blank, it will use the stack.  This isn't too
+; bad, but if you are doing multiple multiplies in a row
+; there will be wasted cycles with the restoring of the stack
+; for each call.
+;
+; If the temp is called "patch", this assumes that
+; That the B and K registers are the same, and will
+; patch the value forward
+;
+; math~mulfp16
+
+                macro
+&lab            math~mulfp16 &temp
+&lab            anop
+                jsl     math~mul2r4
+; slide the result back down
+                aif     C:&temp=0,.notemp
+                aif     "&temp"="patch",.patch
+; caller gave us temp memory
+                xba
+                and     #$00ff
+                sta     &temp
+                txa
+                xba
+                and     #$ff00
+                ora     &temp
+                mexit
+.notemp
+; Use the stack
+                xba
+                and     #$00ff
+                pha
+                txa
+                xba
+                and     #$ff00
+                ora     1,s
+                plx
+                mexit
+.patch
+; patch forward
+                xba
+                and     #$00ff
+                sta     ~a&SYSCNT+1
+                txa
+                xba
+                and     #$ff00
+~a&SYSCNT       ora     #$0000
+                mend
+
+;...............................................................
+; Shift ACC zero or more times.
+; Add support for a value too.
+                macro
+&lab            shiftright &count
+&lab            anop
+                lcla    &index
+&index          seta    0
+                aif     &count=8,.is_8
+                aif     &count>0,.loop
+                mexit
+.is_8
+; 8, quicker with an xba, however, the carry flag will not be the same as if it were 8 asls!
+                xba
+                and     #$00ff
+                mexit
+.loop
+                lsr a
+&index          seta    &index+1
+                aif     &index<&count,.loop
+                mend
+
+;...............................................................
+                macro
+&lab            shiftleft &count
+&lab            anop
+                lcla    &index
+&index          seta 0
+                aif     &count=8,.is_8
+                aif     &count>0,.loop
+                mexit
+.is_8
+; 8, quicker with an xba, however, the carry flag will not be the same as if it were 8 asls!
+                xba
+                and     #$ff00
+                mexit
+.loop
+                asl     a
+&index          seta    &index+1
+                aif     &index<&count,.loop
+                mend
+
+;...............................................................
+; Load pixels into the ACC, with an immediate value
+; This is simply a convenience macro, so that
+; how you specify the pixel entries, is in the same visual order
+; the pixels appear on the screen.
+; Ex.
+; loadpixels 1234
+; loadpixels $1,$2,$3,$4
+;
+                macro
+&lab            loadpixels &v1,&v2,&v3,&v4
+&lab            anop
+                lclc    &a
+                lclc    &b
+                lclc    &c
+                lclc    &d
+                lclc    &p
+                aif     C:&v4<>0,.has_all
+                aif     L:&v1=4,.has_4
+                aif     L:&v1=5,.has_5
+                mnote 'loadpixels requires a 4 digit hex number',1
+                mexit
+
+.has_4
+&a              amid    &v1,1,1
+&b              amid    &v1,2,1
+&c              amid    &v1,3,1
+&d              amid    &v1,4,1
+
+                lda     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+
+.has_5
+&p              amid    &v1,1,1
+                aif     "&p"="$",.has_hex
+                mnote 'loadpixels, expected a preceeding $'
+                mexit
+
+.has_hex
+&a              amid    &v1,2,1
+&b              amid    &v1,3,1
+&c              amid    &v1,4,1
+&d              amid    &v1,5,1
+
+                lda     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+
+.has_all
+&a              setc    &v1
+&b              setc    &v2
+&c              setc    &v3
+&d              setc    &v14
+
+                lda     #(&a|4)+(&b)+(&c|12)+(&d|8)
+
+                mend
+
+;...............................................................
+; Mask out pixels in the ACC, with an immediate value
+; This is simply a convenience macro, so that
+; how you specify the mask entries, is in the same visual order
+; the pixels appear on the screen.
+; Ex.
+; maskpixels F00F
+; maskpixels $f,$0,$0,$f
+;
+                macro
+&lab            maskpixels &v1,&v2,&v3,&v4
+&lab            anop
+                lclc    &a
+                lclc    &b
+                lclc    &c
+                lclc    &d
+                lclc    &p
+                aif     C:&v4<>0,.has_all
+                aif     L:&v1=4,.has_4
+                aif     L:&v1=5,.has_5
+                mnote 'maskpixels requires a 4 digit hex number',1
+                mexit
+
+.has_4
+&a              amid    &v1,1,1
+&b              amid    &v1,2,1
+&c              amid    &v1,3,1
+&d              amid    &v1,4,1
+
+                and     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+
+.has_5
+&p              amid    &v1,1,1
+                aif     "&p"="$",.has_hex
+                mnote 'maskpixels, expected a preceeding $'
+                mexit
+
+.has_hex
+&a              amid    &v1,2,1
+&b              amid    &v1,3,1
+&c              amid    &v1,4,1
+&d              amid    &v1,5,1
+
+                and     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+
+.has_all
+&a              setc    &v1
+&b              setc    &v2
+&c              setc    &v3
+&d              setc    &v14
+
+                and     #(&a|4)+(&b)+(&c|12)+(&d|8)
+
+                mend
+
+;...............................................................
+; OR pixels in the ACC, with an immediate value
+; This is simply a convenience macro, so that
+; how you specify the OR entries, is in the same visual order
+; the pixels appear on the screen.
+; Ex.
+; orpixels $0,$F,$F,$0
+;
+                macro
+&lab            orpixels &v1,&v2,&v3,&v4
+&lab            anop
+                lclc    &a
+                lclc    &b
+                lclc    &c
+                lclc    &d
+                lclc    &p
+                aif     C:&v4<>0,.has_all
+                aif     L:&v1=4,.has_4
+                aif     L:&v1=5,.has_5
+                mnote 'orpixels requires a 4 digit hex number',1
+                mexit
+
+.has_4
+&a              amid    &v1,1,1
+&b              amid    &v1,2,1
+&c              amid    &v1,3,1
+&d              amid    &v1,4,1
+
+                ora     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+.has_5
+&p              amid    &v1,1,1
+                aif     "&p"="$",.has_hex
+                mnote 'orpixels, expected a preceeding $'
+                mexit
+
+.has_hex
+&a              amid    &v1,2,1
+&b              amid    &v1,3,1
+&c              amid    &v1,4,1
+&d              amid    &v1,5,1
+
+                ora     #($&a|4)+($&b)+($&c|12)+($&d|8)
+                mexit
+
+.has_all
+&a              setc    &v1
+&b              setc    &v2
+&c              setc    &v3
+&d              setc    &v14
+
+                ora     #(&a|4)+(&b)+(&c|12)+(&d|8)
+
+                mend
+
+;...............................................................
+                macro
+&lab            equ_id &SYSOPR
+                lclc &c1
+                lclc &c2
+                lclc &c3
+                lclc &c4
+                lcla &len
+&len            seta L:&SYSOPR
+
+                AIF   L:&SYSOPR=4,.a                ; no quotes
+                AIF   L:&SYSOPR=6,.a                ; quotes
+                mnote 'expecting a FOURCC &SYSOPR &len',1
+                mexit
+.a
+&c1             amid  &SYSOPR,1,1
+&c2             amid  &SYSOPR,2,1
+&c3             amid  &SYSOPR,3,1
+&c4             amid  &SYSOPR,4,1
+&lab            equ '&c4&c3&c2&c1'
+                mend
+
+;...............................................................
+; Clamp an unsigned value
+; clamp reg,lowvalue,highvalue
+                macro
+&lab            clamp  &reg,&low,&high
+&lab            anop
+
+                lclc    &C
+&C              amid    &reg,1,1
+                aif     "&C"="a",.rega
+                aif     "&C"="x",.regx
+                aif     "&C"="y",.regx
+                mnote 'Expexting A X or Y for the register',1
+                mexit
+
+.rega
+                cmp &low
+                bge ~a&SYSCNT
+                lda &low
+                bra ~b&SYSCNT
+~a&SYSCNT       anop
+                cmp &high
+                blt ~b&SYSCNT
+                lda &high
+~b&SYSCNT       anop
+                mexit
+
+.regx
+                cpx &low
+                bge ~a&SYSCNT
+                ldx &low
+                bra  ~b&SYSCNT
+~a&SYSCNT       anop
+                cpx &high
+                blt ~b&SYSCNT
+                ldx &high
+~b&SYSCNT       anop
+                mexit
+
+.regy
+                cpy &low
+                bge ~a&SYSCNT
+                ldy &low
+                bra  ~b&SYSCNT
+~a&SYSCNT       anop
+                cpy &high
+                blt ~b&SYSCNT
+                ldy &high
+~b&SYSCNT       anop
+
+                mend
+
+;...............................................................
+;
+; Signed compare branch macros, for easier reading.
+;
+; WARNING:
+; These signed-compare branches are NOT completely correct.
+; They are only correct, if the SIGNED (not absolute!) delta
+; between the two values, either from an SBC or a CMP, is less
+; than $7f for 8-bit or $7fff for 16-bit.
+; This is because a true test needs to involve the
+; V (overflow) flag, and that is not changed with a
+; CMP.  It is with an SBC, but even then, the test needs
+; to be that N eor V is true, which is not easy to do efficiently.
+;
+; I'm using the simple N test, because a vast majority of the time
+; I am comparing values that have ranges than are
+; much less than +/- $7fff, and would not cause the V flag to be set,
+; so I can assume it is 0, and just test the N flag.
+;
+;...............................................................
+
+;...............................................................
+; Clamp a signed value
+; sclamp reg,lowvalue,highvalue
+                macro
+&lab            sclamp  &reg,&low,&high
+&lab            anop
+
+                lclc    &C
+&C              amid    &reg,1,1
+                aif     "&C"="a",.rega
+                aif     "&C"="x",.regx
+                aif     "&C"="y",.regx
+                mnote 'Expexting A X or Y for the register',1
+                mexit
+
+.rega
+                cmp &low
+                bsge ~a&SYSCNT
+                lda &low
+                bra ~b&SYSCNT
+~a&SYSCNT       anop
+                cmp &high
+                bslt ~b&SYSCNT
+                lda &high
+~b&SYSCNT       anop
+                mexit
+
+.regx
+                cpx &low
+                bsge ~a&SYSCNT
+                ldx &low
+                bra  ~b&SYSCNT
+~a&SYSCNT       anop
+                cpx &high
+                bslt ~b&SYSCNT
+                ldx &high
+~b&SYSCNT       anop
+                mexit
+
+.regy
+                cpy &low
+                bsge ~a&SYSCNT
+                ldy &low
+                bra  ~b&SYSCNT
+~a&SYSCNT       anop
+                cpy &high
+                bslt ~b&SYSCNT
+                ldy &high
+~b&SYSCNT       anop
+
+                mend
+
+;...............................................................
+; Less than
+                macro
+&lab            bslt    &where
+&lab            anop
+                bmi     &where
+                mend
+
+;...............................................................
+; Less than or equal to
+                macro
+&lab            bsle    &where
+&lab            anop
+                bmi     &where
+                beq     &where
+                mend
+
+;...............................................................
+; Greater than or equal
+                macro
+&lab            bsge    &where
+&lab            anop
+                bpl     &where
+                mend
+
+;...............................................................
+; Greater than
+                macro
+&lab            bsgt    &where
+&lab            anop
+                beq     ~a&SYSCNT
+                bpl     &where
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Equal to. Adding this for completeness
+                macro
+&lab            bseq     &where
+&lab            anop
+                beq     &where
+                mend
+
+;...............................................................
+; Not equal to. Adding this for completeness
+                macro
+&lab            bsne    &where
+&lab            anop
+                bne     &where
+                mend
+
+;...............................................................
+; Long branch versions of the signed compares.
+; Note that I'm using a jmp, rather than a brl, like Orca macros
+; use.  A jmp is faster than a brl (3 vs. 4 cycles).  It does
+; make for address dependent code, but we are assuming that
+; there is address fixup on load for lots of other things.
+
+;...............................................................
+; Less than
+                macro
+&lab            jslt    &where
+&lab            anop
+                bpl     ~a&SYSCNT
+                jmp     &where
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Less than or equal to
+                macro
+&lab            jsle    &where
+&lab            anop
+                beq     ~a&SYSCNT
+                bpl     ~b&SYSCNT
+~a&SYSCNT       jmp     &where
+~b&SYSCNT       anop
+                mend
+
+;...............................................................
+; Greater than or equal
+                macro
+&lab            jsge    &where
+&lab            anop
+                bmi     ~a&SYSCNT
+                jmp     &where
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Greater than
+                macro
+&lab            jsgt    &where
+&lab            anop
+                bmi     ~a&SYSCNT
+                beq     ~a&SYSCNT
+                jmp     &where
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Equal to. Adding this for completeness
+                macro
+&lab            jseq    &where
+&lab            anop
+                bne     ~a&SYSCNT
+                jmp     &where
+~a&SYSCNT       anop
+                mend
+
+;...............................................................
+; Not equal to. Adding this for completeness
+                macro
+&lab            jsne     &where
+&lab            anop
+                beq     ~a&SYSCNT
+                jmp     &where
+~a&SYSCNT       anop
+                mend
+
+
+;...............................................................
+; Stack Frame helper macros.  Taken from the M16.Utils2 from
+; APWs, AIncludes and modified a bit
+;...............................................................
+
+;...............................................................
+; begin_locals
+;
+; alias for begin_struct, except this will set the default to 1
+; which is what is needed for a DP based stack frame when using
+; the subroutine macros
+;
+                macro
+                begin_locals &offset
+                aif     C:&offset=0,.nooffset
+                begin_struct &offset
+                mexit
+.nooffset
+                begin_struct 1
+                mend
+
+;...............................................................
+; begin_results
+;
+; Used with the subroutine macros to peek further on into
+; the DP, where the caller's stack is, to put return
+; values directly on it.
+;
+; alias for begin_struct, except this will set the start
+; to &worklen+&totallen+3+1
+;
+                macro
+                begin_results
+                aif     C:&totallen<>0,.ok
+                mnote 1,'begin_results must be after a subroutine definition'
+                mexit
+.ok
+                begin_struct &worklen+&totallen+3+1
+                mend
+
+;...............................................................
+; begin_struct
+;
+; Begin a struct definition.
+; Sets dummy PC starting at an offset.
+; If no offset is specified, the default is 0
+;
+                macro
+                begin_struct &offset
+
+; Define the DummyStart, if it is not already
+                aif     c:&DummyStart,.past
+                gblc    &DummyStart
+.past
+
+; Assign a value to the DummyStart, keeping as a string
+                aif     C:&offset=0,.nooffset
+&DummyStart     setc    &offset
+                ago     .hasOffset
+.nooffset
+&DummyStart     setc    '0'       ; default start of 0, keeping it a string
+.hasOffset
+
+; Define the DummyPC, if it is not already
+                aif     c:&DummyPC,.past
+                gbla    &DummyPC
+.past
+&DummyPC        seta    0
+                mend
+
+;...............................................................
+; end_locals
+;
+; alias for end_struct
+;
+                macro
+&lab            end_locals &offset
+                aif     C:&offset=0,.nooffset
+&lab            end_struct &offset
+                mexit
+.nooffset
+&lab            end_struct
+                mend
+
+;...............................................................
+; end_results
+;
+; alias for end_struct
+;
+                macro
+&lab            end_results &offset
+                aif     C:&offset=0,.nooffset
+&lab            end_struct &offset
+                mexit
+.nooffset
+&lab            end_struct
+                mend
+
+;...............................................................
+; &lab end_struct
+;
+; End the struct declaration.
+; The &lab, will be used to assign a label the size of the struct
+; The optional &offset_label parameter, will be assigned the
+; starting offset + the struct size
+;
+                macro
+&lab            end_struct &offset_label
+                lclc    &equ_str
+                aif     C:&lab=0,.no_size_label
+                aif     L:&lab=0,.no_size_label
+&equ_str        setc    '&DummyPC'
+&lab            equ     &equ_str
+.no_size_label
+                aif     C:&offset_label=0,.done
+; Set an offset label, to allow for chaining.
+&equ_str        setc    '&DummyStart+&DummyPC'
+&offset_label   equ     &equ_str
+.done
+                mend
+
+;...............................................................
+; &lab decl &type
+;
+; Equate the given label with the current dummy PC,
+; and update the dummy PC by the appropriate amount.
+;
+; Allows for some pre-defined types, byte, char,
+; word, dword, long, ptr, sptr
+; * or here, can be used to define a label at the current PC
+; without advancing the PC
+;...............................................................
+                macro
+&lab            decl    &type
+                lclc    &equ_str
+&equ_str        setc    '&DummyStart+&DummyPC'
+&lab            equ     &equ_str
+                aif     "&type"="char",.param_byte
+                aif     "&type"="byte",.param_byte
+                aif     "&type"="word",.param_word
+                aif     "&type"="long",.param_long
+                aif     "&type"="dword",.param_long
+                aif     "&type"="ptr",.param_long
+                aif     "&type"="sptr",.param_word
+                aif     "&type"="*",.param_placeholder
+                aif     "&type"="here",.param_placeholder
+; Make sure it is not accedentally 0
+                aif     &type=$8000,.undefined
+                aif     &type>0,.ok
+.undefined
+                mnote 'decl is 0 or undefined for &type',1
+.ok
+&DummyPC        seta    &DummyPC+&type
+                mexit
+.param_byte     anop
+&DummyPC        seta    &DummyPC+1
+                mexit
+.param_word     anop
+&DummyPC        seta    &DummyPC+2
+                mexit
+.param_long anop
+&DummyPC        seta    &DummyPC+4
+.param_placeholder
+                mend

@@ -1,0 +1,103 @@
+;............................................................
+; Helper macro to advance a vector iterator
+;
+;    vector_iterator_next address   - address is a pointer to a vector_iterator object
+;...............................................................
+        MACRO
+&lab    vector_iterator_next &addr
+&lab    ANOP
+        clc
+        lda &addr
+        adc &addr+vector_iterator~delta_size
+        sta &addr
+; Are we supporting cross-bank data?
+        lda &addr+2
+        adc #0
+        sta &addr+2
+        MEND
+;............................................................
+; Helper macro to advance a vector iterator and test for the end
+;
+;    vector_iterator_next_test_end address   - address is a pointer to a vector_iterator object
+;...............................................................
+        MACRO
+&lab    vector_iterator_next_test_end &addr
+&lab    ANOP
+        clc
+        lda &addr
+        adc &addr+vector_iterator~delta_size
+        sta &addr
+; Are we supporting cross-bank data?
+        lda &addr+2
+        adc #0
+        sta &addr+2
+        eor &addr+vector_iterator~end_ptr+2
+        eor &addr
+        eor &addr+vector_iterator~end_ptr
+        MEND
+;............................................................
+; Helper macro to compare a vector iterator to it's end value
+; This will change A.
+;
+;    vector_iterator_equals_end address   - address is a pointer to a vector_iterator object
+;...............................................................
+        MACRO
+&lab    vector_iterator_equals_end &addr
+&lab    ANOP
+        lda &addr
+        eor &addr+vector_iterator~end_ptr
+; Are we supporting cross-bank data?  Even if we are not, since end_ptr has to be one further, we would have issue with a vector that is a full bank size
+        eor &addr+2
+        eor &addr+vector_iterator~end_ptr+2
+        MEND
+;............................................................
+; Get the data ptr from an iterator and put it into an address
+; This will change A.
+;
+;    vector_iterator_data_ptr iteratoraddress,destinationaddress
+;...............................................................
+        MACRO
+&lab    vector_iterator_data_ptr &addr1,&addr2
+&lab    ANOP
+        lda &addr1+vector_iterator~ptr
+        sta &addr2
+        lda &addr1+vector_iterator~ptr+2
+        sta &addr2+2
+        MEND
+;............................................................
+; Advances a data pointer that is pointing to an element
+; in the ptr_vector.  This is NOT a full iterator!
+; This will change A.
+;
+;    ptr_vector_data_ptr_next address
+;...............................................................
+        MACRO
+&lab    ptr_vector_data_ptr_next &addr
+&lab    ANOP
+        clc
+        lda &addr
+        adc #4
+        sta &addr
+        lda &addr+2
+        adc #0
+        sta &addr+2
+        MEND
+
+;............................................................
+; Set a data pointer that is pointing to an element
+; in the ptr_vector to the previous element.  This is NOT a full iterator!
+; This will change A.
+;
+;    ptr_vector_data_ptr_prev address
+;...............................................................
+        MACRO
+&lab    ptr_vector_data_ptr_prev &addr
+&lab    ANOP
+        sec
+        lda &addr
+        sbc #4
+        sta &addr
+        lda &addr+2
+        sbc #0
+        sta &addr+2
+        MEND
