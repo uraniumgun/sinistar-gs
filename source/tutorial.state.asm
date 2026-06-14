@@ -411,7 +411,7 @@ str_press_fire              cstring 'PRESS FIRE BUTTON TO SEE HIGH SCORE'
 str_press_1_or_2            cstring 'PRESS START OR 1 OR 2 TO PLAY'
 str_press_C                 cstring 'PRESS SELECT OR C FOR CONFIGURATION'
 str_press_I                 cstring 'PRESS I FOR INFORMATION'
-str_version                 cstring 'VERSION 0.5'
+str_version                 cstring 'VERSION 0.5.1'
                             end
 
 ; ----------------------------------------------------------------------------

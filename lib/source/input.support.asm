@@ -867,15 +867,18 @@ found_x                     stx input~analog_joystick_buttons
 found_y                     txa
                             tsb input~analog_joystick_buttons
 
+                            ago .skip
 ; Using the last key modifiers as our button state.
+; NOTE: This seems to work in an emulator, but is not working all the time ORH
                             lda input~last_key_modifiers
                             xba
                             and #input~joy_a+input~joy_b
                             ora input~analog_joystick_buttons
                             sta input~analog_joystick_buttons           ; save, but leave button values in a-reg on exit
+.skip
 
 ; If directly reading the button state is desired, enable this code
-                            ago .skip
+
 ; This code assumes input~joy_a is the high-bit in the word
                             lda >ssw~button_0
                             and #$8080
@@ -886,7 +889,6 @@ found_y                     txa
                             ora #input~joy_b
 switch_1_off                ora input~analog_joystick_buttons
                             sta input~analog_joystick_buttons
-.skip
 
                             restoredatabank
                             rtl
