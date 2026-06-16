@@ -324,6 +324,10 @@ str_joystick_state          anop
 str_joystick_state_x        dc c'00'
                             dc c', Y:'
 str_joystick_state_y        dc c'00'
+                            dc c', B0:'
+str_joystick_state_button_0 dc c'00'
+                            dc c', B1:'
+str_joystick_state_button_1 dc c'00'
                             dc i1'0'
 
 ; Display and config strings for a few things.
@@ -3632,6 +3636,7 @@ next                        anop
 get_analog_joystick_state   private seg_gameplay
                             using inputlib_data
                             using config_state_data
+                            using softswitch_definitions
 
                             lda >input~analog_joystick_enabled
                             beq not_enabled
@@ -3651,6 +3656,25 @@ get_analog_joystick_state   private seg_gameplay
                             and #$00ff
                             pha
                             pushdword #str_joystick_state_y
+                            pushsword #2
+                            jsl word_to_hex_str
+
+                            lda >ssw~button_0
+                            pha
+                            asl a
+                            xba
+                            and #$0001
+                            pha
+                            pushdword #str_joystick_state_button_0
+                            pushsword #2
+                            jsl word_to_hex_str
+
+                            pla
+                            and #$8000
+                            rol a
+                            rol a
+                            pha
+                            pushdword #str_joystick_state_button_1
                             pushsword #2
                             jsl word_to_hex_str
 

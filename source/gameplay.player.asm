@@ -1192,6 +1192,7 @@ gameplay_player_handle_joystick start seg_gameplay
                             using gameplay_manager_data
                             using applib_data
                             using inputlib_data
+                            using softswitch_definitions
 
                             begin_locals
 wXThrust                    decl word
@@ -1330,7 +1331,9 @@ found_range                 rts
 ;; Local function to handle the buttons
 handle_buttons              anop
 ; Fire
-                            lda <wButtons
+                            jsr get_joy_buttons
+                            ora <wButtons               ; ora with the input 'key' buttons, which we will support too.
+                            sta <wButtons
                             bit |gameplay_player_fire~joystick_key_button
                             beq no_fire
                             lda gameplay_player_fire~on
@@ -1372,6 +1375,15 @@ sinibomb_done               rts
 
 no_sinibomb                 stz gameplay_player_sinibomb~launched
                             rts
+
+get_joy_buttons             anop
+                            lda >ssw~button_0
+                            and #$8080
+                            bit #$8000
+                            beq switch_1_off
+                            and #ssw~key_down_apple     ; must be $80
+                            ora #ssw~key_down_option
+switch_1_off                rts
 
 analog_to_direction         dc i'direction~west'        ; left
                             dc i'direction~east'        ; right
