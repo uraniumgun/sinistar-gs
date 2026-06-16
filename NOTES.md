@@ -92,7 +92,7 @@ I have to give a hearty thank you to the Apple II and retro programming communit
 
 * Byte Works, Mike Westerfield and all the maintainers of the ORCA/M environment.
 * Kelvin Sherlock, for the amazing Golden Gate Virtual Machine, that made it possible for me to develop with ORCA/M, just like the old days.
-* Antoine Vignai, Olivier Zardini and Brutal Deluxe for all of the games, tools, documentation and code over these many years.
+* Antoine Vignau, Olivier Zardini and Brutal Deluxe for all of the games, tools, documentation and code over these many years.
 * SynaMax for the original Sinistar source code clean up, annotation and insights into the gameplay.
 * Einar Saukas for the ZX0 compression algorithm https://github.com/einar-saukas/ZX0
 * Emmanuel Marty for the Salvador ZX0 Decompressor https://github.com/emmanuel-marty/salvador

@@ -284,7 +284,7 @@ str_section_1_bw_b          dc c' FOR THE WONDERFUL ORCA/M ENVIRONMENT.',i1'0'
 str_section_1_gg            dc c'KELVIN SHERLOCK',i1'0'
 str_section_1_gg_b          dc c' FOR THE AMAZING GOLDEN GATE VIRTUAL MACHINE.',i1'0'
 
-str_section_1_bd            dc c'ANTOINE VIGNAI, OLIVIER ZARDINI AND BRUTAL DELUXE SOFTWARE',i1'0'
+str_section_1_bd            dc c'ANTOINE VIGNAU, OLIVIER ZARDINI AND BRUTAL DELUXE SOFTWARE',i1'0'
 str_section_1_bd_b          dc c' FOR CYRENE, CADIUS,',i1'0'
 str_section_1_bd_c          dc c'AND ALL THE OTHER AWESOME TOOLS AND CODE THEY HAVE CONTRIBUTED OVER THE YEARS.',i1'0'
 
